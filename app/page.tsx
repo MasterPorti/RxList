@@ -112,16 +112,16 @@ export default function LoginPage() {
         <div className="animate-fade-in-delay-1">
           <div className="status-indicator">
             <span className="status-dot" />
-            System Online
+            Sistema En Línea
           </div>
         </div>
 
         {/* Login Card */}
         <div className="login-card animate-fade-in-delay-2">
-          <h1>Welcome Back</h1>
+          <h1>Bienvenido de Nuevo</h1>
           <p className="subtitle">
-            Sign in to access your patient prescription dashboard and AI-powered
-            Rx scanning tools.
+            Inicia sesión para acceder a tu panel de recetas médicas y las
+            herramientas de escaneo Rx con IA.
           </p>
 
           {/* Form */}
@@ -133,7 +133,7 @@ export default function LoginPage() {
             {/* Email */}
             <div className="form-group">
               <label className="form-label" htmlFor="login-email">
-                Email
+                Correo Electrónico
               </label>
               <div className="form-input-wrapper">
                 <span className="form-input-icon">
@@ -143,7 +143,7 @@ export default function LoginPage() {
                   id="login-email"
                   className="form-input"
                   type="email"
-                  placeholder="doctor@hospital.com"
+                  placeholder="doctor@hospital.mx"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   autoComplete="email"
@@ -154,7 +154,7 @@ export default function LoginPage() {
             {/* Password */}
             <div className="form-group">
               <label className="form-label" htmlFor="login-password">
-                Password
+                Contraseña
               </label>
               <div className="form-input-wrapper">
                 <span className="form-input-icon">
@@ -173,7 +173,7 @@ export default function LoginPage() {
                   type="button"
                   className="password-toggle"
                   onClick={() => setShowPassword(!showPassword)}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
                 >
                   {showPassword ? <EyeOffIcon /> : <EyeIcon />}
                 </button>
@@ -184,40 +184,40 @@ export default function LoginPage() {
             <div className="form-row">
               <label className="form-checkbox">
                 <input type="checkbox" id="remember-me" />
-                Remember me
+                Recordarme
               </label>
               <a href="#" className="form-link">
-                Forgot password?
+                ¿Olvidaste tu contraseña?
               </a>
             </div>
 
             {/* Submit */}
             <button type="submit" className="btn-primary" id="login-submit">
-              Sign In
+              Iniciar Sesión
             </button>
           </form>
 
           {/* Divider */}
           <div className="login-divider">
-            <span>or</span>
+            <span>o</span>
           </div>
 
           {/* Social */}
           <button className="btn-social" id="google-login">
             <GoogleIcon />
-            Continue with Google
+            Continuar con Google
           </button>
 
           {/* Signup */}
           <div className="signup-prompt">
-            Don&apos;t have an account?{" "}
-            <a href="#">Request Access</a>
+            ¿No tienes una cuenta?{" "}
+            <a href="#">Solicitar Acceso</a>
           </div>
         </div>
 
         {/* Footer */}
         <div className="login-footer animate-fade-in-delay-4">
-          © 2026 RxList · HIPAA Compliant · v1.0.0
+          © 2026 RxList · Cumple con HIPAA · v1.0.0
         </div>
       </div>
 
@@ -242,10 +242,10 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <h2>AI-Powered Rx Scanning</h2>
+          <h2>Escaneo Rx con IA</h2>
           <p>
-            Transform handwritten prescriptions into organized, actionable
-            checklists — powered by artificial intelligence.
+            Transforma recetas médicas escritas a mano en listas de verificación
+            organizadas y accionables — impulsado por inteligencia artificial.
           </p>
 
           {/* Feature Steps */}
@@ -253,10 +253,10 @@ export default function LoginPage() {
             <div className="feature-step">
               <div className="feature-step-number">01</div>
               <div className="feature-step-content">
-                <h3>Scan Prescription</h3>
+                <h3>Escanear Receta</h3>
                 <p>
-                  Upload or photograph the patient&apos;s Rx list using your device
-                  camera.
+                  Sube o fotografía la lista Rx del paciente usando la cámara
+                  de tu dispositivo.
                 </p>
               </div>
             </div>
@@ -264,10 +264,10 @@ export default function LoginPage() {
             <div className="feature-step">
               <div className="feature-step-number">02</div>
               <div className="feature-step-content">
-                <h3>AI Processing</h3>
+                <h3>Procesamiento con IA</h3>
                 <p>
-                  Our AI engine reads, identifies, and validates each medication
-                  automatically.
+                  Nuestro motor de IA lee, identifica y valida cada medicamento
+                  automáticamente.
                 </p>
               </div>
             </div>
@@ -275,10 +275,10 @@ export default function LoginPage() {
             <div className="feature-step">
               <div className="feature-step-number">03</div>
               <div className="feature-step-content">
-                <h3>Smart Checklist</h3>
+                <h3>Checklist Inteligente</h3>
                 <p>
-                  Receive an organized checklist with dosages, schedules, and
-                  interaction alerts.
+                  Recibe un checklist organizado con dosis, horarios y
+                  alertas de interacciones.
                 </p>
               </div>
             </div>

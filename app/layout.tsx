@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RxList — AI-Powered Prescription Management",
+  title: "RxList — Gestión de Recetas Médicas con IA",
   description:
-    "RxList helps doctors and nurses scan patient Rx prescriptions with AI, transforming them into smart checklists for accurate medication management.",
+    "RxList ayuda a doctores y enfermeras a escanear recetas médicas de pacientes con IA, transformándolas en checklists inteligentes para una gestión precisa de medicamentos.",
 };
 
 export default function RootLayout({
@@ -24,7 +24,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
+    <html lang="es" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body>{children}</body>
     </html>
   );

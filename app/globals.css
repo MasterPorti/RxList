@@ -1,26 +1,807 @@
-@import "tailwindcss";
+/* ===================================================
+   RxList — Nothing Phone Inspired Design System
+   Monochrome · Dot-matrix · Glyph Interface · Clean
+   =================================================== */
+
+/* === CSS Reset & Base === */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Nothing Phone Palette */
+  --rx-black: #000000;
+  --rx-white: #ffffff;
+  --rx-gray-50: #fafafa;
+  --rx-gray-100: #f0f0f0;
+  --rx-gray-200: #e0e0e0;
+  --rx-gray-300: #c0c0c0;
+  --rx-gray-400: #a0a0a0;
+  --rx-gray-500: #808080;
+  --rx-gray-600: #606060;
+  --rx-gray-700: #404040;
+  --rx-gray-800: #202020;
+  --rx-gray-900: #121212;
+  --rx-gray-950: #0a0a0a;
+
+  /* Accent — Nothing Phone Red */
+  --rx-accent: #d71921;
+  --rx-accent-dim: rgba(215, 25, 33, 0.15);
+  --rx-accent-glow: rgba(215, 25, 33, 0.4);
+
+  /* Surfaces */
+  --rx-bg: var(--rx-gray-950);
+  --rx-bg-card: var(--rx-gray-900);
+  --rx-bg-input: var(--rx-gray-800);
+  --rx-border: var(--rx-gray-700);
+  --rx-border-subtle: var(--rx-gray-800);
+  --rx-text-primary: var(--rx-white);
+  --rx-text-secondary: var(--rx-gray-400);
+  --rx-text-muted: var(--rx-gray-500);
+
+  /* Typography */
+  --rx-font-sans: var(--font-geist-sans), 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --rx-font-mono: var(--font-geist-mono), 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Spacing */
+  --rx-radius-sm: 6px;
+  --rx-radius-md: 12px;
+  --rx-radius-lg: 20px;
+  --rx-radius-xl: 28px;
+  --rx-radius-full: 9999px;
+
+  /* Transitions */
+  --rx-transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --rx-transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --rx-transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Dot grid */
+  --dot-size: 1px;
+  --dot-spacing: 24px;
+  --dot-color: rgba(255, 255, 255, 0.06);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  height: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+  background: var(--rx-bg);
+  color: var(--rx-text-primary);
+  font-family: var(--rx-font-sans);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* === Dot Matrix Background Pattern === */
+.dot-matrix {
+  background-image: radial-gradient(
+    circle,
+    var(--dot-color) var(--dot-size),
+    transparent var(--dot-size)
+  );
+  background-size: var(--dot-spacing) var(--dot-spacing);
+}
+
+/* === Glyph Lines — Nothing Phone inspired === */
+.glyph-line {
+  position: relative;
+}
+
+.glyph-line::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--rx-gray-700) 20%,
+    var(--rx-gray-700) 80%,
+    transparent 100%
+  );
+}
+
+/* === Login Container === */
+.login-wrapper {
+  display: flex;
+  min-height: 100vh;
+  position: relative;
+}
+
+.login-left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 48px;
+  position: relative;
+  z-index: 1;
+}
+
+.login-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 48px;
+  position: relative;
+  overflow: hidden;
+  background: var(--rx-gray-900);
+  border-left: 1px solid var(--rx-border-subtle);
+}
+
+/* === Brand === */
+.brand-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.brand-logo-icon {
+  width: 48px;
+  height: 48px;
+  border: 2px solid var(--rx-accent);
+  border-radius: var(--rx-radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background: var(--rx-accent-dim);
+  box-shadow: 0 0 20px var(--rx-accent-glow), inset 0 0 12px var(--rx-accent-dim);
+}
+
+.brand-logo-icon svg {
+  width: 24px;
+  height: 24px;
+  color: var(--rx-accent);
+}
+
+.brand-name {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: var(--rx-text-primary);
+}
+
+.brand-name span {
+  color: var(--rx-accent);
+}
+
+.brand-tagline {
+  font-size: 14px;
+  color: var(--rx-text-muted);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 48px;
+  font-family: var(--rx-font-mono);
+}
+
+/* === Login Card === */
+.login-card {
+  width: 100%;
+  max-width: 400px;
+}
+
+.login-card h1 {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  letter-spacing: -0.3px;
+}
+
+.login-card .subtitle {
+  font-size: 14px;
+  color: var(--rx-text-secondary);
+  margin-bottom: 36px;
+  line-height: 1.5;
+}
+
+/* === Form Elements === */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--rx-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom: 8px;
+  font-family: var(--rx-font-mono);
+}
+
+.form-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.form-input-icon {
+  position: absolute;
+  left: 16px;
+  width: 18px;
+  height: 18px;
+  color: var(--rx-text-muted);
+  pointer-events: none;
+  transition: color var(--rx-transition-fast);
+}
+
+.form-input {
+  width: 100%;
+  padding: 14px 16px 14px 48px;
+  background: var(--rx-bg-input);
+  border: 1px solid var(--rx-border-subtle);
+  border-radius: var(--rx-radius-md);
+  color: var(--rx-text-primary);
+  font-size: 15px;
+  font-family: var(--rx-font-sans);
+  transition: all var(--rx-transition-fast);
+  outline: none;
+}
+
+.form-input::placeholder {
+  color: var(--rx-text-muted);
+}
+
+.form-input:focus {
+  border-color: var(--rx-accent);
+  box-shadow: 0 0 0 3px var(--rx-accent-dim);
+}
+
+.form-input:focus ~ .form-input-icon,
+.form-input:focus + .form-input-icon {
+  color: var(--rx-accent);
+}
+
+.form-input-wrapper:focus-within .form-input-icon {
+  color: var(--rx-accent);
+}
+
+.password-toggle {
+  position: absolute;
+  right: 16px;
+  background: none;
+  border: none;
+  color: var(--rx-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--rx-transition-fast);
+}
+
+.password-toggle:hover {
+  color: var(--rx-text-primary);
+}
+
+.password-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* === Form Row === */
+.form-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+}
+
+.form-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--rx-text-secondary);
+}
+
+.form-checkbox input[type="checkbox"] {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--rx-border);
+  border-radius: 4px;
+  background: var(--rx-bg-input);
+  cursor: pointer;
+  position: relative;
+  transition: all var(--rx-transition-fast);
+}
+
+.form-checkbox input[type="checkbox"]:checked {
+  background: var(--rx-accent);
+  border-color: var(--rx-accent);
+}
+
+.form-checkbox input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 5px;
+  height: 9px;
+  border: solid var(--rx-white);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.form-link {
+  font-size: 13px;
+  color: var(--rx-accent);
+  text-decoration: none;
+  font-weight: 500;
+  transition: opacity var(--rx-transition-fast);
+}
+
+.form-link:hover {
+  opacity: 0.8;
+}
+
+/* === Buttons === */
+.btn-primary {
+  width: 100%;
+  padding: 14px;
+  background: var(--rx-accent);
+  color: var(--rx-white);
+  border: none;
+  border-radius: var(--rx-radius-md);
+  font-size: 15px;
+  font-weight: 600;
+  font-family: var(--rx-font-sans);
+  cursor: pointer;
+  transition: all var(--rx-transition-fast);
+  position: relative;
+  overflow: hidden;
+  letter-spacing: 0.3px;
+}
+
+.btn-primary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    transparent 50%
+  );
+  opacity: 0;
+  transition: opacity var(--rx-transition-fast);
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px var(--rx-accent-glow);
+}
+
+.btn-primary:hover::before {
+  opacity: 1;
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+/* === Divider === */
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 28px 0;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--rx-border-subtle);
+}
+
+.login-divider span {
+  font-size: 12px;
+  color: var(--rx-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-family: var(--rx-font-mono);
+}
+
+/* === Social Buttons === */
+.btn-social {
+  width: 100%;
+  padding: 13px;
+  background: transparent;
+  border: 1px solid var(--rx-border);
+  border-radius: var(--rx-radius-md);
+  color: var(--rx-text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  font-family: var(--rx-font-sans);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: all var(--rx-transition-fast);
+  margin-bottom: 12px;
+}
+
+.btn-social:hover {
+  background: var(--rx-gray-800);
+  border-color: var(--rx-gray-600);
+}
+
+.btn-social svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* === Right Panel — Feature Showcase === */
+.feature-showcase {
+  width: 100%;
+  max-width: 420px;
+  text-align: center;
+}
+
+.feature-showcase h2 {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  letter-spacing: -0.3px;
+}
+
+.feature-showcase p {
+  font-size: 14px;
+  color: var(--rx-text-secondary);
+  line-height: 1.6;
+  margin-bottom: 40px;
+}
+
+/* === Glyph Animation — Nothing Phone Inspired === */
+.glyph-interface {
+  width: 280px;
+  height: 280px;
+  margin: 0 auto 40px;
+  position: relative;
+}
+
+/* Outer ring */
+.glyph-ring {
+  position: absolute;
+  border: 1px solid var(--rx-gray-700);
+  border-radius: 50%;
+  animation: glyph-pulse 4s ease-in-out infinite;
+}
+
+.glyph-ring:nth-child(1) {
+  inset: 0;
+  border-color: rgba(215, 25, 33, 0.3);
+  animation-delay: 0s;
+}
+
+.glyph-ring:nth-child(2) {
+  inset: 30px;
+  border-color: rgba(215, 25, 33, 0.2);
+  animation-delay: 0.5s;
+}
+
+.glyph-ring:nth-child(3) {
+  inset: 60px;
+  border-color: rgba(215, 25, 33, 0.15);
+  animation-delay: 1s;
+}
+
+.glyph-center {
+  position: absolute;
+  inset: 90px;
+  border-radius: 50%;
+  background: var(--rx-accent-dim);
+  border: 2px solid var(--rx-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 40px var(--rx-accent-glow);
+  animation: glyph-glow 3s ease-in-out infinite alternate;
+}
+
+.glyph-center svg {
+  width: 40px;
+  height: 40px;
+  color: var(--rx-accent);
+}
+
+/* Dot indicators */
+.glyph-dots {
+  position: absolute;
+  inset: 0;
+  animation: glyph-rotate 20s linear infinite;
+}
+
+.glyph-dot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: var(--rx-accent);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--rx-accent-glow);
+}
+
+.glyph-dot:nth-child(1) {
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.glyph-dot:nth-child(2) {
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+}
+
+.glyph-dot:nth-child(3) {
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.glyph-dot:nth-child(4) {
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+}
+
+/* === Feature Steps === */
+.feature-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  text-align: left;
+}
+
+.feature-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px;
+  border-radius: var(--rx-radius-md);
+  border: 1px solid transparent;
+  transition: all var(--rx-transition-normal);
+}
+
+.feature-step:hover {
+  background: rgba(215, 25, 33, 0.04);
+  border-color: var(--rx-border-subtle);
+}
+
+.feature-step-number {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border-radius: var(--rx-radius-sm);
+  border: 1px solid var(--rx-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--rx-accent);
+  font-family: var(--rx-font-mono);
+  background: var(--rx-accent-dim);
+}
+
+.feature-step-content h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.feature-step-content p {
+  font-size: 13px;
+  color: var(--rx-text-muted);
+  margin-bottom: 0;
+  line-height: 1.5;
+}
+
+/* === Footer === */
+.login-footer {
+  position: absolute;
+  bottom: 24px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--rx-text-muted);
+  font-family: var(--rx-font-mono);
+  letter-spacing: 0.5px;
+}
+
+/* === Animations === */
+@keyframes glyph-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes glyph-glow {
+  0% {
+    box-shadow: 0 0 20px var(--rx-accent-dim);
+  }
+  100% {
+    box-shadow: 0 0 50px var(--rx-accent-glow);
+  }
+}
+
+@keyframes glyph-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scan-line {
+  0% {
+    top: -2px;
+  }
+  100% {
+    top: 100%;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in-up 0.6s ease-out forwards;
+}
+
+.animate-fade-in-delay-1 {
+  animation: fade-in-up 0.6s ease-out 0.1s forwards;
+  opacity: 0;
+}
+
+.animate-fade-in-delay-2 {
+  animation: fade-in-up 0.6s ease-out 0.2s forwards;
+  opacity: 0;
+}
+
+.animate-fade-in-delay-3 {
+  animation: fade-in-up 0.6s ease-out 0.3s forwards;
+  opacity: 0;
+}
+
+.animate-fade-in-delay-4 {
+  animation: fade-in-up 0.6s ease-out 0.4s forwards;
+  opacity: 0;
+}
+
+/* === Status indicator === */
+.status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--rx-text-muted);
+  font-family: var(--rx-font-mono);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 32px;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  background: #22c55e;
+  border-radius: 50%;
+  animation: status-blink 2s ease-in-out infinite;
+}
+
+@keyframes status-blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* === Responsive === */
+@media (max-width: 1024px) {
+  .login-right {
+    display: none;
+  }
+
+  .login-left {
+    padding: 32px 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-left {
+    padding: 24px 16px;
+  }
+
+  .brand-name {
+    font-size: 24px;
+  }
+
+  .login-card h1 {
+    font-size: 20px;
+  }
+
+  .form-input {
+    padding: 12px 12px 12px 44px;
+    font-size: 14px;
+  }
+}
+
+/* === Scan line effect on right panel === */
+.scan-line-effect {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.scan-line-effect::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--rx-accent-dim),
+    transparent
+  );
+  animation: scan-line 6s linear infinite;
+}
+
+/* === Signup prompt === */
+.signup-prompt {
+  text-align: center;
+  margin-top: 24px;
+  font-size: 14px;
+  color: var(--rx-text-secondary);
+}
+
+.signup-prompt a {
+  color: var(--rx-accent);
+  text-decoration: none;
+  font-weight: 600;
+  transition: opacity var(--rx-transition-fast);
+}
+
+.signup-prompt a:hover {
+  opacity: 0.8;
 }

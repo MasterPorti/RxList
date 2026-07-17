@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local voice-agent runtime data
+/agent/runtime/
+/agent/responses/*.json
+
+# python
+__pycache__/
+
+# dev/runtime logs
+*.log

@@ -3,12 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "next dev",
+    "dev:whisper": "python whisper_server.py",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
+    "@ai-sdk/react": "^4.0.20",
+    "ai": "^7.0.19",
     "next": "16.2.9",
     "react": "19.2.4",
     "react-dom": "19.2.4"

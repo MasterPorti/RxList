@@ -1,0 +1,2 @@
+import { NextResponse } from "next/server";import { cookies } from "next/headers";import { readSession } from "../../../../lib/auth";import { getStore } from "../../../../lib/store";
+export async function GET(){const s=await readSession((await cookies()).get("rxlist_session")?.value||"");const u=(await getStore()).users.find(x=>x.id===s?.id);if(!u||u.role!=="doctor")return NextResponse.json({error:"unauthorized"},{status:401});const {passwordHash,...safe}=u;return NextResponse.json({doctor:safe,revision:(await getStore()).revision})}

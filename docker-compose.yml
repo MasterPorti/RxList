@@ -1,0 +1,31 @@
+services:
+  web:
+    build: .
+    environment:
+      REDIS_URL: redis://redis:6379
+      WHISPER_URL: http://whisper:8000
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET}
+    depends_on:
+      redis: { condition: service_healthy }
+      whisper: { condition: service_healthy }
+    restart: unless-stopped
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes: [redis-data:/data]
+    healthcheck: { test: [CMD, redis-cli, ping], interval: 10s, timeout: 3s, retries: 5 }
+  whisper:
+    build: ./whisper
+    environment: { WHISPER_MODEL: small }
+    volumes: [whisper-cache:/root/.cache]
+    healthcheck: { test: [CMD, wget, -qO-, http://localhost:8000/health], interval: 30s, timeout: 10s, retries: 3 }
+  caddy:
+    image: caddy:2-alpine
+    ports: ["80:80", "443:443"]
+    volumes: [./Caddyfile:/etc/caddy/Caddyfile:ro, caddy-data:/data, caddy-config:/config]
+    depends_on: [web]
+volumes:
+  redis-data:
+  whisper-cache:
+  caddy-data:
+  caddy-config:

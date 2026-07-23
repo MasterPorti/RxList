@@ -1,0 +1,5 @@
+import { NextResponse } from "next/server";
+import { currentContext } from "../../../../lib/api";
+import { saveStore } from "../../../../lib/store";
+import { audit, floorHasRoom } from "../../../../lib/domain";
+export async function PATCH(req:Request,{params}:{params:Promise<{id:string}>}){const c=await currentContext();if(!c||c.user.role!=="doctor")return NextResponse.json({error:"forbidden"},{status:403});const {id}=await params;const p=c.store.patients.find(x=>x.id===id);if(!p)return NextResponse.json({error:"not_found"},{status:404});const b=await req.json();if(b.action==="discharge"){p.status="discharged";p.floor="unassigned";p.bed=undefined}else{const floor=Number(b.floor);const bed=Number(b.bed);if(![1,2,3,4].includes(floor)||!floorHasRoom(c.store,floor as 1|2|3|4,bed))return NextResponse.json({error:"bed_unavailable"},{status:409});p.floor=floor as 1|2|3|4;p.bed=bed;p.status="admitted"}audit(c.store,c.user,b.action==="discharge"?"discharge":"assign","patient",p.id);c.store.revision++;await saveStore(c.store);return NextResponse.json({ok:true,patient:p,revision:c.store.revision})}

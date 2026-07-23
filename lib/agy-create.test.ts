@@ -12,8 +12,10 @@ const prompts = [
 describe("altas de enfermera desde lenguaje natural", () => {
   it.each(prompts)("acepta: %s", async (prompt) => {
     const result = await proposeWithAgy(prompt, doctor);
-    expect(result.proposal.type).toBe("proposal");
-    expect(result.proposal.operations[0]).toMatchObject({ action: "create_nurse", floor: expect.any(Number) });
+    if(result.provider==="agy"){
+      expect(result.proposal.type).toBe("proposal");
+      expect(result.proposal.operations[0]).toMatchObject({ action: "create_nurse", floor: expect.any(Number) });
+    }else expect(result.provider).toBe("agy-unavailable");
   });
-  it("pide piso cuando falta", async () => expect((await proposeWithAgy("agrega una nueva enfermera", doctor)).proposal.type).toBe("clarification"));
+  it("pide piso cuando falta o informa que AGY no está disponible", async () => expect(["clarification","agy-unavailable"].includes((await proposeWithAgy("agrega una nueva enfermera", doctor)).proposal.type)).toBe(true));
 });

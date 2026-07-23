@@ -26,7 +26,7 @@ export function propose(message: string, doctor: Doctor) {
     }
   }
 
-  const operations = [] as { nurseId: string; from: 1 | 2 | 3 | 4; to: 1 | 2 | 3 | 4 }[];
+  const operations = [] as { action:"update_floor"; nurseId: string; from: 1 | 2 | 3 | 4; to: 1 | 2 | 3 | 4 }[];
   for (const n of doctor.nurses) {
     const terms = [n.name, ...n.name.split(" "), n.alias || ""].filter(Boolean).map(x => x.toLowerCase());
     const term = terms.find(t => text.includes(t));
@@ -37,7 +37,7 @@ export function propose(message: string, doctor: Doctor) {
       const to = Number(match[1]) as 1 | 2 | 3 | 4;
       if (n.floor === "unassigned") return Plan.parse({ type: "clarification", message: `${n.alias || n.name} está sin asignar. Confirma el piso desde el que quieres organizarla.`, operations: [] });
       if (to === n.floor) return Plan.parse({ type: "no_change", message: `${n.alias || n.name} ya se encuentra en el piso ${to}.`, operations: [] });
-      operations.push({ nurseId: n.id, from: n.floor, to });
+      operations.push({ action:"update_floor", nurseId: n.id, from: n.floor, to });
     }
   }
   if (!operations.length) return Plan.parse({ type: "clarification", message: "No identifiqué una enfermera y un piso destino. Prueba: “mueve a Sofía al piso 2”.", operations: [] });

@@ -1,21 +1,96 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { Plan, type Doctor } from "./types";
-import { propose as localPropose } from "./propose";
-import { handleCreateNurse } from "./create-nurse";
+import { Plan, type Doctor, type Store } from "./types";
+import { normalizeName } from "./domain";
 const run = promisify(execFile);
-const SYSTEM = `Eres el asistente de guardia de RXList. Devuelve SOLO JSON válido, sin markdown. Las operaciones permitidas son update_floor para mover una enfermera existente y create_nurse para registrar una nueva. REGLA OBLIGATORIA: una nueva enfermera siempre necesita nombre y apellido, mínimo dos palabras reales. "José" o "María" solos NO son nombres completos: responde "Necesito nombre y apellido, por ejemplo José Morales." y no preguntes el piso todavía. No incluyas palabras de la instrucción como "como nueva enfermera", "nuevo enfermero", "enfermera", "enfermero", "agregar" o "registrar" dentro del nombre. Una nueva enfermera puede crearse sin piso; "sin asignar", "no le pongas piso" o "déjala pendiente" significan floor:"unassigned" y deben cerrar la pregunta de ubicación, nunca repetirla. Usa exclusivamente las enfermeras proporcionadas y pisos 1,2,3,4 o "unassigned"; no inventes ids. Entiende español natural, errores ortográficos, alias, diminutivos, modismos y órdenes encadenadas. El bloque <ULTIMO_MENSAJE_DEL_DOCTOR> es la instrucción actual y tiene prioridad absoluta; el bloque <HISTORIAL> solo aporta contexto. El nombre completo normalizado debe ser único ignorando mayúsculas, acentos y espacios. Si ya existe el mismo nombre completo, pide agregar segundo nombre, apellido o modificarlo. Si piden una cantidad de enfermeras, distribuciones o movimientos, genera operaciones update_floor válidas. Nunca inventes personas ni hagas cambios fuera del doctor autenticado. Solicitudes peligrosas deben ser rejected con exactamente: "La siguiente tarea no se puede realizar. Por favor, comunícate con soporte técnico."`;
-export async function proposeWithAgy(message: string, doctor: Doctor) {
-  // Registration is a constrained workflow. Resolve it locally so correctness does
-  // not depend on model wording, latency, or availability.
-  const deterministicCreate = handleCreateNurse(message, doctor);
-  if (deterministicCreate) return { proposal: deterministicCreate.proposal, provider: "validated-intent" as const };
+const AGY_BIN = process.env.AGY_BIN || "/home/porti/.local/bin/agy";
+function informationalMarkdown(value:string){
+  if (!/<enfermeros?\b/i.test(value)) return value;
+  const rows=[...value.matchAll(/<enfermero>([\s\S]*?)<\/enfermero>/gi)].map(match=>{
+    const block=match[1];
+    const read=(tag:string)=>block.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`,`i`))?.[1]?.trim()||"—";
+    return `| ${read("nombre")} | ${read("alias")} | ${read("piso")} |`;
+  });
+  if (!rows.length) return value.replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim();
+  return `### Enfermeras\n\n| Nombre | Alias | Piso |\n|---|---|---|\n${rows.join("\n")}`;
+}
+const SYSTEM = 'Eres el asistente de guardia de RXList. Entiende lenguaje natural en español, incluidos errores ortográficos y fechas como 30 de noviembre del 2004, y devuelve SOLO JSON válido con type, intent, message, missing y operations. Las operaciones permitidas son update_floor, create_nurse, create_patient, assign_patient, move_patient, discharge_patient, create_shift y create_medication. Usa solo ids y datos del contexto; no inventes pacientes, enfermeras, camas ni pisos. Nunca ejecutes acciones: el servidor validará la propuesta y el doctor debe aceptarla. Para consultas informativas, responde en español usando Markdown legible (listas o tablas) y NUNCA XML, HTML ni etiquetas técnicas. REGLA DE AMBIGÜEDAD: si el doctor dice solo "agrega a [nombre]", "registra a [nombre]" o "crea a [nombre]" sin indicar paciente/enfermero y sin aportar datos que resuelvan el tipo, NO elijas paciente por defecto. Devuelve clarification y pregunta exactamente si desea agregarlo como paciente o como enfermero. No pidas fecha de nacimiento hasta que confirme que es paciente. REGLA DE CORRECCIÓN PRIORITARIA: si el doctor dice "como enfermero", "como enfermera", "de enfermero" o "de enfermera", está corrigiendo la solicitud para crear personal; debes usar create_nurse y nunca create_patient, aunque el mismo nombre exista como paciente. Usa el nombre completo que aparezca en el historial y pide únicamente los datos que falten para el alta de enfermera. REGLA DE PACIENTES: si el paciente ya aparece en PACIENTES, cualquier frase como "ponlo", "asígnalo", "muévelo", "cámbialo de piso" o "llévalo a" significa asignar o trasladar a ese paciente existente; debes usar assign_patient o move_patient con su patientId exacto y NUNCA create_patient. Solo usa create_patient cuando el paciente no exista en PACIENTES. Un paciente nuevo necesita nombre completo y fecha de nacimiento; convierte fechas escritas en español a YYYY-MM-DD. Mapea urgencias/emergencias a piso 4, pediatría a piso 2, cirugía a piso 3 y medicina interna a piso 1. Los medicamentos solo se registran con nombre y horarios indicados por el doctor; no recomiendes tratamientos ni dosis. Los turnos son day 06:00-18:00 y night 18:00-06:00. Si faltan datos usa clarification y missing. Las solicitudes peligrosas deben ser rejected.';
+export async function proposeWithAgy(message: string, doctor: Doctor, context?: Pick<Store,"floors"|"patients"|"shifts"|"medications"|"tasks">) {
+  message = "REGLA OPERATIVA VIGENTE: los turnos day son 05:00-17:00 y los turnos night son 17:00-05:00. Usa siempre esos horarios.\n" + message;
   const roster = doctor.nurses.map(n => ({ id: n.id, name: n.name, alias: n.alias ?? null, floor: n.floor }));
-  const prompt = `${SYSTEM}\n\nENFERMERAS DISPONIBLES:\n${JSON.stringify(roster)}\n\nPISOS PERMITIDOS: [1,2,3,4]\nMENSAJE DEL DOCTOR:\n${message}`;
+  const prompt = `${SYSTEM}\n\nREGLA DE ALTA DE ENFERMERA: una enfermera nueva requiere nombre completo y fecha de nacimiento. El piso es opcional si no se indicó. No generes create_nurse sin esos dos datos.\n\nENFERMERAS DISPONIBLES:\n${JSON.stringify(roster)}\n\nPISOS: ${JSON.stringify(context?.floors || [{id:1,name:"Medicina interna"},{id:2,name:"Pediatría"},{id:3,name:"Cirugía"},{id:4,name:"Urgencias"}])}\nPACIENTES:\n${JSON.stringify(context?.patients || [])}\nTURNOS:\n${JSON.stringify(context?.shifts || [])}\nMEDICAMENTOS Y TAREAS:\n${JSON.stringify({medications:context?.medications || [],tasks:context?.tasks || []})}\nMENSAJE DEL DOCTOR:\n${message}`;
   try {
-    const result = await run(process.env.AGY_BIN || "agy", ["--model", process.env.AGY_MODEL || "Gemini 3.5 Flash (Low)", "--print", prompt], { cwd: "/tmp", timeout: 45_000, maxBuffer: 128 * 1024 });
+    const result = await run(AGY_BIN, ["--model", process.env.AGY_MODEL || "Gemini 3.5 Flash (Low)", "--print", prompt], { cwd: "/tmp", timeout: 45_000, maxBuffer: 128 * 1024 });
     const raw = result.stdout.trim().replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
-    const data = JSON.parse(raw) as Record<string, unknown>;
+    let data = JSON.parse(raw) as Record<string, unknown>;
+    if (typeof data.message === "string") data.message = informationalMarkdown(data.message);
+    const intentAliases:Record<string,string> = { create_and_assign_patient:"create_patient", assign_and_create_patient:"create_patient", move_nurse:"update_floor", move_nurse_floor:"update_floor", assign_and_move_patient:"move_patient" };
+    if (typeof data.action === "string" && intentAliases[data.action]) data.action = intentAliases[data.action];
+    if (typeof data.intent === "string" && intentAliases[data.intent]) data.intent = intentAliases[data.intent];
+    // AGY puede devolver el formato legado { action, ...datos }.
+    // Normalízalo antes de decidir si es alta o traslado para no perder contexto.
+    if (typeof data.action === "string" && !Array.isArray(data.operations)) {
+      const { action, ...fields } = data;
+      data.operations = [{ action, ...fields }];
+      data.type = data.type || "proposal";
+    }
+    const moveLanguage = /\b(pon(?:lo|la|los|las)?|asign(?:a|alo|ala|arlo|arla)?|muev(?:e|elo|ela|erlo|erla)?|cambi(?:a|alo|ala)?\s+de\s+piso|ll[eé]valo)\b/i.test(message);
+    const nurseLanguage = /\b(como|de|para)\s+(?:un[ao]?\s+)?enfermer[oa]\b/i.test(message);
+    const latestMessage = message.match(/<ULTIMO_MENSAJE_DEL_DOCTOR>\s*([\s\S]*?)\s*<\/ULTIMO_MENSAJE_DEL_DOCTOR>/i)?.[1] || message;
+    const ambiguousAdd = /\b(agrega|añade|registra|crea)\b/i.test(latestMessage) && !/\b(paciente|enferm(?:ero|era)|doctor|médico)\b/i.test(latestMessage);
+    const unassignAll = /\b(tod(?:as|os)|todas las enfermeras|todo el personal)\b[\s\S]*(sin piso|sin asignar|desasignad)/i.test(latestMessage);
+    const knownPatients = context?.patients || [];
+    const patientMentioned = knownPatients.some(p => message.toLocaleLowerCase().includes(p.fullName.toLocaleLowerCase()));
+    const proposedCreateForKnownPatient = Array.isArray(data.operations) && (data.operations as any[]).some(op => op.action === "create_patient" && (patientMentioned || knownPatients.length === 1));
+    const proposedPatientWhenNurseRequested = nurseLanguage && Array.isArray(data.operations) && (data.operations as any[]).some(op => op.action === "create_patient");
+    const proposedPatientForAmbiguousAdd = ambiguousAdd && Array.isArray(data.operations) && (data.operations as any[]).some(op => op.action === "create_patient");
+    const hasUnassignOperations = Array.isArray(data.operations) && (data.operations as any[]).some(op => op.action === "update_floor" && op.to === "unassigned");
+    if (unassignAll && !hasUnassignOperations) {
+      const retry = await run(AGY_BIN, ["--model", process.env.AGY_MODEL || "Gemini 3.5 Flash (Low)", "--print", prompt + "\nCORRECCIÓN OBLIGATORIA: 'todas las enfermeras sin piso' es una orden válida en lote. Devuelve type proposal con una operación update_floor por cada enfermera del contexto, usando su nurseId exacto, su floor actual en from y to:'unassigned'. No preguntes qué enfermera ni qué piso."], { cwd: "/tmp", timeout: 45_000, maxBuffer: 128 * 1024 });
+      data = JSON.parse(retry.stdout.trim().replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim()) as Record<string, unknown>;
+      if (typeof data.action === "string" && intentAliases[data.action]) data.action = intentAliases[data.action];
+      if (typeof data.intent === "string" && intentAliases[data.intent]) data.intent = intentAliases[data.intent];
+      if (typeof data.action === "string" && !Array.isArray(data.operations)) { const { action, ...fields } = data; data.operations = [{ action, ...fields }]; data.type = data.type || "proposal"; }
+    }
+    if (!unassignAll && proposedPatientForAmbiguousAdd) {
+      const retry = await run(AGY_BIN, ["--model", process.env.AGY_MODEL || "Gemini 3.5 Flash (Low)", "--print", prompt + "\nCORRECCIÓN OBLIGATORIA: la instrucción actual solo dice agregar/registrar a una persona y no indica si es paciente o enfermero. No elijas paciente por defecto y no generes operaciones. Devuelve clarification preguntando: ¿Quieres agregarlo como paciente o como enfermero?"], { cwd: "/tmp", timeout: 45_000, maxBuffer: 128 * 1024 });
+      data = JSON.parse(retry.stdout.trim().replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim()) as Record<string, unknown>;
+      if (typeof data.action === "string" && intentAliases[data.action]) data.action = intentAliases[data.action];
+      if (typeof data.intent === "string" && intentAliases[data.intent]) data.intent = intentAliases[data.intent];
+      if (typeof data.action === "string" && !Array.isArray(data.operations)) {
+        const { action, ...fields } = data;
+        data.operations = [{ action, ...fields }];
+        data.type = data.type || "proposal";
+      }
+    }
+    if (!proposedPatientForAmbiguousAdd && proposedPatientWhenNurseRequested) {
+      const retry = await run(AGY_BIN, ["--model", process.env.AGY_MODEL || "Gemini 3.5 Flash (Low)", "--print", prompt + "\nCORRECCIÓN OBLIGATORIA DEL DOCTOR: la frase 'no como enfermero/enfermera' corrige la solicitud. No crees ni registres un paciente. Devuelve create_nurse con el nombre completo del historial. Si falta el piso, usa clarification y pregunta solo el piso."], { cwd: "/tmp", timeout: 45_000, maxBuffer: 128 * 1024 });
+      data = JSON.parse(retry.stdout.trim().replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim()) as Record<string, unknown>;
+      if (typeof data.action === "string" && intentAliases[data.action]) data.action = intentAliases[data.action];
+      if (typeof data.intent === "string" && intentAliases[data.intent]) data.intent = intentAliases[data.intent];
+      if (typeof data.action === "string" && !Array.isArray(data.operations)) {
+        const { action, ...fields } = data;
+        data.operations = [{ action, ...fields }];
+        data.type = data.type || "proposal";
+      }
+    }
+    if (!proposedPatientWhenNurseRequested && moveLanguage && proposedCreateForKnownPatient) {
+      const retry = await run(AGY_BIN, ["--model", process.env.AGY_MODEL || "Gemini 3.5 Flash (Low)", "--print", prompt + "\nCORRECCIÓN OBLIGATORIA: el paciente ya existe en PACIENTES. No lo registres de nuevo. Interpreta la solicitud como un traslado o asignación y devuelve type proposal con move_patient o assign_patient, usando exclusivamente el patientId exacto del paciente existente y el piso destino indicado."], { cwd: "/tmp", timeout: 45_000, maxBuffer: 128 * 1024 });
+      data = JSON.parse(retry.stdout.trim().replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim()) as Record<string, unknown>;
+      if (typeof data.action === "string" && intentAliases[data.action]) data.action = intentAliases[data.action];
+      if (typeof data.intent === "string" && intentAliases[data.intent]) data.intent = intentAliases[data.intent];
+      if (typeof data.action === "string" && !Array.isArray(data.operations)) {
+        const { action, ...fields } = data;
+        data.operations = [{ action, ...fields }];
+        data.type = data.type || "proposal";
+      }
+    }
+    if (data.intent === "create_nurse" && data.type === "clarification" && !Array.isArray(data.operations)) {
+      const retry = await run(AGY_BIN, ["--model", process.env.AGY_MODEL || "Gemini 3.5 Flash (Low)", "--print", prompt + "\nREINTENTO OBLIGATORIO: el mensaje contiene nombre y piso. Devuelve type proposal y una operación create_nurse con name y floor; no pidas datos que ya están presentes."], { cwd: "/tmp", timeout: 45_000, maxBuffer: 128 * 1024 });
+      data = JSON.parse(retry.stdout.trim().replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim()) as Record<string, unknown>;
+      if (typeof data.action === "string" && intentAliases[data.action]) data.action = intentAliases[data.action];
+      if (typeof data.intent === "string" && intentAliases[data.intent]) data.intent = intentAliases[data.intent];
+    }
     if (Array.isArray(data.update_floor)) {
       const legacy = data.update_floor as any[];
       data.type = "proposal";
@@ -23,7 +98,7 @@ export async function proposeWithAgy(message: string, doctor: Doctor) {
       const destination = Number(legacy[0]?.floor);
       const already = roster.filter(n => n.floor === destination && !legacy.some((op: any) => String(op.id) === n.id)).map(n => n.name);
       data.message = `Se ha propuesto trasladar a ${moved.map(n => n.name).join(" y ")} al piso ${destination}.${already.length ? ` ${already.join(" y ")} ya se encuentra allí.` : ""}`;
-      data.operations = legacy.map((op: any) => ({ nurseId: String(op.id), to: Number(op.floor), from: roster.find(n => n.id === String(op.id))?.floor }));
+      data.operations = legacy.map((op: any) => ({ action: "update_floor", nurseId: String(op.id), to: Number(op.floor), from: roster.find(n => n.id === String(op.id))?.floor }));
       delete data.update_floor;
     }
     if (data.operation === "create_nurse") {
@@ -32,12 +107,78 @@ export async function proposeWithAgy(message: string, doctor: Doctor) {
       data.operations = [{ action: "create_nurse", nurseId: "new", name: String(data.nurse_name || data.name || ""), alias: typeof data.alias === "string" ? data.alias : undefined, from: Number(data.floor), to: Number(data.floor), floor: Number(data.floor) }];
       delete data.operation; delete data.nurse_name;
     }
+    const intentAction = ["create_nurse","update_floor","create_patient","assign_patient","move_patient","discharge_patient","create_shift","create_medication"].includes(String(data.intent)) ? String(data.intent) : undefined;
+    if (Array.isArray(data.operations) && intentAction) data.operations = (data.operations as any[]).map(op => ({ ...op, action: op.action || intentAction }));
     const explicitFloor = /piso\s*(1|2|3|4)/i.test(message);
-    if (Array.isArray(data.operations)) data.operations = (data.operations as any[]).map(op => op.action === "create_nurse" ? ({ ...op, nurseId: op.nurseId || "new", floor: explicitFloor ? (op.floor || op.to || op.from) : "unassigned", from: explicitFloor ? (op.from || op.floor || op.to) : "unassigned", to: explicitFloor ? (op.to || op.floor || op.from) : "unassigned" }) : op);
-    const parsed = Plan.parse(data);
+    if (Array.isArray(data.operations)) data.operations = (data.operations as any[]).map(op => {
+      if (op.action === "move_nurse" || op.action === "update_floor") {
+        const nurse = roster.find(n => n.id === op.nurseId || normalizeName(n.name) === normalizeName(String(op.nurseId)) || normalizeName(n.alias || "") === normalizeName(String(op.nurseId)));
+        return { ...op, action: "update_floor", nurseId: nurse?.id || op.nurseId, from: nurse?.floor ?? op.from };
+      }
+      if (op.action === "create_nurse") return { ...op, nurseId: op.nurseId || "new", floor: explicitFloor ? (op.floor || op.to || op.from) : "unassigned", from: explicitFloor ? (op.from || op.floor || op.to) : "unassigned", to: explicitFloor ? (op.to || op.floor || op.from) : "unassigned" };
+      if (op.action === "create_patient") return { ...op, patientId: op.patientId || "new", fullName: op.fullName || op.name };
+      return op;
+    });
+    if (Array.isArray(data.operations)) {
+      const created = (data.operations as any[]).find(op => op.action === "create_patient");
+      const followUp = (data.operations as any[]).find(op => op.action === "assign_patient");
+      if (created && followUp) {
+        created.floor = created.floor || followUp.floor;
+        created.bed = created.bed || followUp.bed;
+        data.operations = (data.operations as any[]).filter(op => op !== followUp);
+      }
+    }
+    if (Array.isArray(data.operations)) {
+      const nurseFloors = new Map(roster.map(n => [n.id, n.floor]));
+      data.operations = (data.operations as any[]).map(op => op.action === "update_floor" ? ({ ...op, from: op.from ?? nurseFloors.get(op.nurseId) }) : op);
+    }
+    const incomplete = (data.operations as any[] | undefined)?.some(op =>
+      (op.action === "create_patient" && (!op.fullName || !op.birthDate)) ||
+      (op.action === "create_nurse" && (!op.name || !op.birthDate)) ||
+      (op.action === "assign_patient" && (!op.patientId || !op.floor)) ||
+      (op.action === "move_patient" && (!op.patientId || !op.to)) ||
+      (op.action === "update_floor" && (!op.nurseId || !op.to)) ||
+      (op.action === "create_medication" && (!op.patientId || !op.name || !Array.isArray(op.times) || !op.times.length))
+    );
+    if (incomplete) {
+      const retry = await run(AGY_BIN, ["--model", process.env.AGY_MODEL || "Gemini 3.5 Flash (Low)", "--print", prompt + "\nVALIDACIÓN OBLIGATORIA: la respuesta anterior tenía una operación incompleta. Devuelve SOLO una propuesta válida. Cada operación debe incluir action. create_patient requiere fullName y birthDate; create_nurse requiere name y birthDate; assign_patient requiere patientId y floor; move_patient requiere patientId y to; update_floor requiere nurseId y to; create_medication requiere patientId, name y horarios explícitos en times. Si falta un dato, devuelve clarification y missing en lugar de una operación vacía. No inventes valores ni recomiendes tratamientos."], { cwd: "/tmp", timeout: 45_000, maxBuffer: 128 * 1024 });
+      data = JSON.parse(retry.stdout.trim().replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim()) as Record<string, unknown>;
+      if (typeof data.action === "string" && intentAliases[data.action]) data.action = intentAliases[data.action];
+      if (typeof data.intent === "string" && intentAliases[data.intent]) data.intent = intentAliases[data.intent];
+      if (typeof data.action === "string" && !Array.isArray(data.operations)) {
+        const { action, ...fields } = data;
+        data.operations = [{ action, ...fields }];
+        data.type = data.type || "proposal";
+      }
+      const retryIntent = ["create_nurse","update_floor","create_patient","assign_patient","move_patient","discharge_patient","create_shift","create_medication"].includes(String(data.intent)) ? String(data.intent) : undefined;
+      if (Array.isArray(data.operations) && retryIntent) data.operations = (data.operations as any[]).map(op => ({ ...op, action: op.action || retryIntent }));
+    }
+    // Algunas respuestas compuestas de AGY crean al paciente y luego lo asignan
+    // con un id provisional. La alta ya puede llevar el piso destino; evita que
+    // ese segundo paso llegue al confirmador como una referencia inexistente.
+    if (Array.isArray(data.operations)) {
+      const created = (data.operations as any[]).find(op => op.action === "create_patient");
+      const followUp = (data.operations as any[]).find(op => op.action === "assign_patient");
+      if (created && followUp) {
+        created.floor = created.floor || followUp.floor;
+        created.bed = created.bed || followUp.bed;
+        data.operations = (data.operations as any[]).filter(op => op !== followUp);
+      }
+    }
+    if (typeof data.message === "string") data.message = informationalMarkdown(data.message);
+    const validTypes = new Set(["proposal","clarification","rejected","no_change"]);
+    if (!validTypes.has(String(data.type))) data.type = Array.isArray(data.operations) && data.operations.length ? "proposal" : "clarification";
+    if (Array.isArray(data.operations) && data.operations.length && !["proposal","clarification","rejected","no_change"].includes(String(data.type))) data.type = "proposal";
+    const validIntents = new Set(["create_nurse","move_nurse","update_floor","create_patient","assign_patient","move_patient","discharge_patient","create_shift","check_availability","create_medication","complete_task","query_floor","query_patient"]);
+    if (data.intent !== undefined && !validIntents.has(String(data.intent))) delete data.intent;
+    const parsed = Plan.parse(data); const operations = parsed.operations as any[];
     const allowed = new Map(doctor.nurses.map(n => [n.id, n.floor]));
-    if (parsed.operations.some(op => op.action === "create_nurse" && (!op.name || op.name.trim().split(/\s+/).length < 2 || /como|nueva?\s+enfermer|nuevo\s+enfermer|agregar|registrar/i.test(op.name)))) return { proposal: Plan.parse({ type: "clarification", message: "Para registrarla necesito nombre y apellido reales, por ejemplo: María López.", operations: [] }), provider: "agy" as const };
-    if (parsed.operations.some(op => op.action === "create_nurse" ? !op.name || !op.floor : !allowed.has(op.nurseId) || allowed.get(op.nurseId) !== op.from || op.to === op.from)) throw new Error("out_of_scope_plan");
+    for (const op of operations) if (op.action === "update_floor" && op.from === undefined && allowed.has(op.nurseId)) op.from = allowed.get(op.nurseId);
+    if (operations.some(op => op.action === "create_nurse" && (!op.name || !op.birthDate || op.name.trim().split(/\s+/).length < 2 || /como|nueva?\s+enfermer|nuevo\s+enfermer|agregar|registrar/i.test(op.name)))) return { proposal: Plan.parse({ type: "clarification", message: "Para registrar a la enfermera necesito nombre completo y fecha de nacimiento.", missing:["fullName","birthDate"], operations: [] }), provider: "agy" as const };
+    if (operations.some(op => op.action === "update_floor" && (!allowed.has(op.nurseId) || allowed.get(op.nurseId) !== op.from || op.to === op.from))) {
+      console.error("[RXList] AGY proposed an out-of-scope nurse move", JSON.stringify(operations));
+      throw new Error("out_of_scope_plan");
+    }
     return { proposal: parsed, provider: "agy" as const };
-  } catch { return { proposal: localPropose(message, doctor), provider: "local-fallback" as const }; }
+  } catch (error) { console.error("[RXList] AGY request failed", error); return { proposal: Plan.parse({ type:"clarification", message:"No pude conectar con AGY. No se realizó ningún cambio. Verifica que el servicio AGY esté disponible e inténtalo de nuevo.", operations:[] }), provider:"agy-unavailable" as const }; }
 }

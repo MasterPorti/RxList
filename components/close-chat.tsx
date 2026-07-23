@@ -1,0 +1,4 @@
+"use client";
+import {usePathname} from "next/navigation";
+import {useState} from "react";
+export default function CloseChat(){const path=usePathname(),[busy,setBusy]=useState(false),[asking,setAsking]=useState(false);if(path!=="/doctor")return null;async function close(){setBusy(true);const r=await fetch("/api/chat/close",{method:"POST"});if(r.ok)window.dispatchEvent(new Event("rxlist:chat-closed"));setBusy(false);setAsking(false)}return <div className="closechat">{asking?<div className="closechat-confirm"><span>¿Limpiar el contexto de esta gestión?</span><button className="btn" onClick={()=>setAsking(false)}>Cancelar</button><button className="btn primary" onClick={close} disabled={busy}>{busy?"Limpiando…":"Sí, cerrar"}</button></div>:<button className="btn" onClick={()=>setAsking(true)} disabled={busy}>Cerrar gestión</button>}<small>Si terminaste, se recomienda cerrar para iniciar la siguiente gestión sin contexto anterior.</small></div>}

@@ -13,5 +13,6 @@ ENV NODE_ENV=production
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/scripts ./scripts
 EXPOSE 3000
-CMD ["node","server.js"]
+CMD ["sh", "-c", "if [ \"$RESET_DEMO_ON_START\" = \"true\" ]; then node scripts/seed-demo.mjs; fi; exec node server.js"]

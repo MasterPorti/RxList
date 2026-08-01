@@ -12,7 +12,7 @@ npm run dev
 
 Abre http://localhost:3000. Acceso inicial: `admin@rxlist.local` / `RXList-Admin-2026!`. En producción sustituye la contraseña y `SESSION_SECRET`.
 
-En desarrollo, si `REDIS_URL` no está definido se usa `data/rxlist.json` (no se versiona). En Docker Compose se usa Redis con AOF, Whisper CPU INT8 y Caddy. Antes de exponerlo en un VPS, configura TLS/hostname en Caddy, un secreto aleatorio y el usuario aislado del puente AntiGravity.
+En desarrollo, si `REDIS_URL` no está definido se usa `data/rxlist.json` (no se versiona). El Compose de demo no usa Redis: `RESET_DEMO_ON_START=true` regenera los datos demo al arrancar el contenedor web. Whisper corre como servicio interno CPU INT8. Antes de exponerlo en un VPS, configura el dominio HTTPS de Coolify, un secreto aleatorio y el usuario aislado del puente AntiGravity.
 
 ## Prueba rápida
 

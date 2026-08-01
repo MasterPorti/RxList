@@ -2,13 +2,15 @@ import { Plan, type Doctor, type Patient, type Store } from "./types";
 import { normalizeName } from "./domain";
 
 type Context = Pick<Store, "floors" | "patients" | "shifts" | "medications" | "tasks">;
-type LocalResult = { provider: "local"; proposal: Plan };
-type AgyResult = { provider: "agy"; message: string; context: Context };
+type LocalResult = { provider: "local"; proposal: Plan; route: "local"; contextStats: ContextStats };
+type AgyResult = { provider: "agy"; message: string; context: Context; route: "agy"; contextStats: ContextStats };
 export type GatewayResult = LocalResult | AgyResult;
+export type ContextStats = { patients: number; floors: number; shifts: number; medications: number; tasks: number };
 
 const clean = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 const latest = (value: string) => value.match(/<ULTIMO_MENSAJE_DEL_DOCTOR>\s*([\s\S]*?)\s*<\/ULTIMO_MENSAJE_DEL_DOCTOR>/i)?.[1]?.trim() || value.trim();
-const local = (message: string, intent: string, operations: any[] = []): LocalResult => ({ provider: "local", proposal: Plan.parse({ type: "no_change", intent, message, operations }) });
+const local = (message: string, intent: string, operations: any[] = []): LocalResult => ({ provider: "local", route: "local", proposal: Plan.parse({ type: "no_change", intent, message, operations }), contextStats: { patients: 0, floors: 0, shifts: 0, medications: 0, tasks: 0 } });
+const clarification = (message: string, intent: string, missing: string[]): LocalResult => ({ provider: "local", route: "local", proposal: Plan.parse({ type: "clarification", intent, message, missing, operations: [] }), contextStats: { patients: 0, floors: 0, shifts: 0, medications: 0, tasks: 0 } });
 
 function findPatient(query: string, patients: Patient[]) {
   const normalized = clean(query);
@@ -77,7 +79,36 @@ function compactContext(message: string, store: Store): Context {
   };
 }
 
+function contextStats(context: Context): ContextStats {
+  return { patients: context.patients.length, floors: context.floors.length, shifts: context.shifts.length, medications: context.medications.length, tasks: context.tasks.length };
+}
+
+function patientRegistrationContinuation(message: string): LocalResult | null {
+  const current = clean(latest(message));
+  const conversation = clean(message);
+  const isPatientFlow = /como paciente|\bpaciente\b|registrar (?:a )?.*paciente|para registrar .*paciente|datos obligatorios/.test(conversation);
+  const hasDate = /\b\d{1,2}\s+de\s+[a-z]+\s+del?\s+(?:dos\s*mil|\d{4})|\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b/.test(current);
+  const hasPhone = /\b\d[\d\s().-]{7,}\b/.test(current);
+  const hasLocation = /\bpiso\s*[1-4]\b/.test(current) && /\bcama\s*\d+\b/.test(current);
+  if (isPatientFlow && hasDate && hasPhone && !hasLocation) {
+    const hasFloor = /\bpiso\s*[1-4]\b/.test(current);
+    if (hasFloor) return null;
+    return clarification(
+      hasFloor
+        ? "Ya tengo los datos del paciente y el piso. La cama libre se asignará automáticamente; falta confirmar cualquier otro dato pendiente."
+        : "Ya tengo los datos del paciente. Indica el piso y asignaré automáticamente una cama libre.",
+      "create_patient",
+      hasFloor ? [] : ["floor"],
+    );
+  }
+  return null;
+}
+
 export function routePrompt(message: string, store: Store, doctor: Doctor): GatewayResult {
+  const continuation = patientRegistrationContinuation(message);
+  if (continuation) return continuation;
   const localResult = localQuery(message, store, doctor);
-  return localResult || { provider: "agy", message, context: compactContext(message, store) };
+  if (localResult) return { ...localResult, contextStats: contextStats(compactContext(message, store)) };
+  const context = compactContext(message, store);
+  return { provider: "agy", route: "agy", message, context, contextStats: contextStats(context) };
 }

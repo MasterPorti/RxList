@@ -2,7 +2,7 @@
   "name": "rxlist",
   "version": "0.1.0",
   "private": true,
-  "scripts": { "dev": "next dev", "build": "next build", "start": "next start", "lint": "next lint", "test": "vitest run" },
+  "scripts": { "dev": "next dev", "build": "next build", "start": "next start", "lint": "next lint", "test": "vitest run", "seed:demo": "node scripts/seed-demo.mjs", "staff:demo": "node scripts/ensure-demo-staffing.mjs" },
   "dependencies": { "@ai-sdk/openai": "^1.3.0", "ai": "^4.1.0", "jose": "^6.0.0", "next": "^15.2.0", "react": "^19.0.0", "react-dom": "^19.0.0", "redis": "^4.7.0", "zod": "^3.24.0" },
   "devDependencies": { "@types/node": "^22.0.0", "@types/react": "^19.0.0", "@types/react-dom": "^19.0.0", "typescript": "^5.7.0", "vitest": "^3.0.0" }
 }

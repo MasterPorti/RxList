@@ -20,4 +20,13 @@ describe("prompt gateway", () => {
     expect(result.provider).toBe("agy");
     if (result.provider === "agy") expect(result.context.patients).toHaveLength(1);
   });
+  it("pide piso y cama localmente en la continuación de un alta de paciente", () => {
+    const result = routePrompt(`<HISTORIAL>\nDoctor: agrega a Karime Gonzales\nAsistente: ¿Desea registrar a Karime Gonzales como paciente o como enfermera?\nDoctor: como paciente\nAsistente: Para registrar a Karime Gonzales como paciente, por favor proporcione los datos obligatorios.\n</HISTORIAL>\n<ULTIMO_MENSAJE_DEL_DOCTOR>\n14 de junio del dosmil cinco le duele la panza a las papas es alergica y es Julio 5560305975 el contacto de emergencia\n</ULTIMO_MENSAJE_DEL_DOCTOR>`, store, doctor);
+    expect(result.provider).toBe("local");
+    if (result.provider === "local") {
+      expect(result.proposal.type).toBe("clarification");
+      expect(result.proposal.missing).toEqual(["floor"]);
+      expect(result.proposal.message).toContain("cama libre");
+    }
+  });
 });

@@ -1,6 +1,6 @@
 # RXList
 
-Despliegue: consulta [docs/DEPLOY.md](docs/DEPLOY.md) para Vercel y Coolify, variables de entorno, Gemini, Redis y modo demo.
+Despliegue: consulta [docs/DEPLOY.md](docs/DEPLOY.md) para desplegarlo como proyecto Next.js, configurar Gemini y activar el modo demo.
 
 MVP seguro para distribución de enfermería por pisos. El doctor propone movimientos desde el chat; la aplicación valida el alcance, muestra una tarjeta editable y aplica el lote solo después de confirmación y revisión optimista.
 
@@ -14,7 +14,7 @@ npm run dev
 
 Abre http://localhost:3000. Acceso inicial: `admin@rxlist.local` / `RXList-Admin-2026!`. En producción sustituye la contraseña y `SESSION_SECRET`.
 
-En desarrollo, si `REDIS_URL` no está definido se usa `data/rxlist.json` (no se versiona). El Compose de demo no usa Redis: `RESET_DEMO_ON_START=true` regenera los datos demo al arrancar el contenedor web. Whisper corre como servicio interno CPU INT8. Antes de exponerlo en un VPS, configura el dominio HTTPS de Coolify, un secreto aleatorio y el usuario aislado del puente AntiGravity.
+En desarrollo, si `REDIS_URL` no está definido se usa `data/rxlist.json` (no se versiona). `RESET_DEMO_ON_START=true` regenera los datos demo al arrancar Next.js.
 
 ## Prueba rápida
 

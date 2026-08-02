@@ -1,6 +1,6 @@
 # Desplegar RXList
 
-RXList es una aplicación Next.js estándar. Vercel detecta Next.js automáticamente y usa `npm run build`; Coolify puede desplegar el `Dockerfile` incluido.
+RXList es una aplicación Next.js estándar. Vercel detecta Next.js automáticamente y usa `npm run build`.
 
 ## Variables mínimas para una demo
 
@@ -22,7 +22,7 @@ Con `DEMO_MODE=true`, si la base está vacía RXList crea automáticamente un ad
 
 ## Persistencia con JSON
 
-RXList usará `data/rxlist.json` por defecto. En Coolify monta un volumen persistente en `/app/data` para conservar pacientes, tareas y medicamentos después de reiniciar el contenedor. En Vercel el sistema de archivos es efímero, por lo que los cambios se reinician al desplegar o cambiar de instancia; para la presentación usa los datos demo y evita modificar la base durante la demostración.
+RXList usará `data/rxlist.json` por defecto. En Vercel el sistema de archivos es efímero, por lo que los cambios se reinician al desplegar o cambiar de instancia; para la presentación usa los datos demo y evita modificar la base durante la demostración.
 
 En producción cambia `DEMO_MODE=false`, `ALLOW_DEMO_LOGIN=false`, `PUBLIC_DEMO=false` y `NEXT_PUBLIC_DEMO_MODE=false`.
 
@@ -33,18 +33,7 @@ En producción cambia `DEMO_MODE=false`, `ALLOW_DEMO_LOGIN=false`, `PUBLIC_DEMO=
 3. Build command: `npm run build`.
 4. Agrega las variables de `.env.production.example` en Settings → Environment Variables para Preview y Production.
 5. Usa Redis externo si quieres que pacientes y tareas sobrevivan a nuevos despliegues.
-6. No configures `WHISPER_URL` apuntando a `127.0.0.1`: Vercel no puede acceder al Whisper local de tu computadora. La interfaz conserva el respaldo de dictado del navegador.
-
-## Coolify
-
-1. Crea una aplicación desde el repositorio.
-2. Selecciona Dockerfile como build pack; el `Dockerfile` de la raíz ya compila Next.js standalone.
-3. Expón el puerto `3000`.
-4. Agrega las variables de entorno.
-5. Monta un volumen persistente en `/app/data`.
-6. Health check: `GET /api/health`.
-
-El Compose local incluye Whisper, pero es opcional para el despliegue. Para una demo web simple basta Gemini API; Whisper puede quedar en la computadora de desarrollo.
+6. La transcripción de voz queda fuera de este despliegue; configura tu servicio externo por separado cuando lo tengas listo.
 
 ## Seguridad
 

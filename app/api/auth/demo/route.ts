@@ -14,7 +14,7 @@ export async function GET(req: Request) {
   const user = store.users.find(candidate => candidate.email.toLowerCase() === email);
   if (!user) return NextResponse.json({ error: "demo_user_not_found" }, { status: 404 });
 
-  const response = NextResponse.redirect(new URL("/", req.url));
+  const response = new NextResponse(null, { status: 303, headers: { Location: "/" } });
   response.cookies.set("rxlist_session", await signSession(user.id, user.role), {
     httpOnly: true,
     sameSite: "lax",

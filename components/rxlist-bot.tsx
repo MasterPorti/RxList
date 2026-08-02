@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-export default function RxlistBot({ emotion = "idle", size = 34 }: { emotion?: "idle" | "thinking"; size?: number }) {
+export default function RxlistBot({ emotion = "idle", size = 34 }: { emotion?: "idle" | "thinking" | "happy"; size?: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {

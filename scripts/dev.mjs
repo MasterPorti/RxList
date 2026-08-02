@@ -1,9 +1,12 @@
 import { spawn } from "node:child_process";
+import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const nextBin = path.join(root, "node_modules", "next", "dist", "bin", "next");
+const venvPython = process.platform === "win32" ? path.join(root, ".venv", "Scripts", "python.exe") : path.join(root, ".venv", "bin", "python");
+const pythonBin = fs.existsSync(venvPython) ? venvPython : (process.platform === "win32" ? "python" : "python3");
 const children = [];
 
 function start(label, command, args) {
@@ -40,5 +43,6 @@ process.on("SIGINT", () => shutdown());
 process.on("SIGTERM", () => shutdown());
 
 console.log("Iniciando RxList y el servicio local de Whisper...");
-start("Whisper", "python", ["whisper_server.py"]);
+if (!fs.existsSync(venvPython)) console.warn("[Whisper] No encontré .venv; usaré el Python del sistema. Instala whisper/requirements.txt si el servicio no inicia.");
+start("Whisper", pythonBin, ["whisper_server.py"]);
 start("Next.js", process.execPath, [nextBin, "dev"]);

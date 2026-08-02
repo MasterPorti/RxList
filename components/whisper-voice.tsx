@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 
+type BrowserSpeech = { lang: string; continuous: boolean; interimResults: boolean; onresult: ((event: any) => void) | null; onerror: (() => void) | null; start: () => void; stop: () => void };
+
 export default function WhisperVoice() {
   const pathname = usePathname();
   const recorder = useRef<MediaRecorder | null>(null);
@@ -10,6 +12,9 @@ export default function WhisperVoice() {
   const audioContext = useRef<AudioContext | null>(null);
   const animation = useRef<number | null>(null);
   const chunks = useRef<Blob[]>([]);
+  const speech = useRef<BrowserSpeech | null>(null);
+  const fallbackTranscript = useRef("");
+  const fallbackInterim = useRef("");
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -17,6 +22,7 @@ export default function WhisperVoice() {
 
   useEffect(() => () => {
     recorder.current?.stop();
+    try { speech.current?.stop(); } catch { /* el navegador puede detenerlo automáticamente */ }
     if (animation.current) cancelAnimationFrame(animation.current);
     audioContext.current?.close();
   }, []);
@@ -28,7 +34,8 @@ export default function WhisperVoice() {
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { setError("Este navegador no permite grabar audio."); return; }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const media = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      const supportedType = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"].find(type => MediaRecorder.isTypeSupported(type));
+      const media = supportedType ? new MediaRecorder(stream, { mimeType: supportedType }) : new MediaRecorder(stream);
       const context = new AudioContext();
       const meter = context.createAnalyser();
       meter.fftSize = 64;
@@ -44,9 +51,31 @@ export default function WhisperVoice() {
       };
       draw();
       chunks.current = [];
+      fallbackTranscript.current = "";
+      fallbackInterim.current = "";
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        const listener = new SpeechRecognition() as BrowserSpeech;
+        listener.lang = "es-MX"; listener.continuous = true; listener.interimResults = true;
+        listener.onresult = event => {
+          let interim = "";
+          for (let index = event.resultIndex; index < event.results.length; index++) {
+            const transcript = event.results[index][0]?.transcript || "";
+            if (event.results[index].isFinal) fallbackTranscript.current = `${fallbackTranscript.current} ${transcript}`.trim();
+            else interim += transcript;
+          }
+          fallbackInterim.current = interim.trim();
+        };
+        listener.onerror = () => undefined;
+        speech.current = listener;
+        try { listener.start(); } catch { speech.current = null; }
+      }
       media.ondataavailable = event => { if (event.data.size) chunks.current.push(event.data); };
       media.onstop = async () => {
         stream.getTracks().forEach(track => track.stop());
+        try { speech.current?.stop(); } catch { /* el navegador puede detenerlo automáticamente */ }
+        speech.current = null;
+        await new Promise(resolve => setTimeout(resolve, 250));
         if (animation.current) cancelAnimationFrame(animation.current);
         animation.current = null;
         analyser.current = null;
@@ -55,12 +84,18 @@ export default function WhisperVoice() {
         setLevels(Array.from({ length: 24 }, () => .12));
         setRecording(false); setBusy(true);
         const form = new FormData();
-        form.append("audio", new Blob(chunks.current, { type: "audio/webm" }), "rxlist-voice.webm");
+        const audioType = media.mimeType || "audio/webm";
+        const extension = audioType.includes("mp4") ? "mp4" : audioType.includes("ogg") ? "ogg" : "webm";
+        form.append("audio", new Blob(chunks.current, { type: audioType }), `rxlist-voice.${extension}`);
         try {
           const response = await fetch("/api/transcribe", { method: "POST", body: form, credentials: "same-origin" });
           const result = await response.json();
           if (response.status === 401) throw new Error("Tu sesión expiró. Vuelve a iniciar sesión en RXList y prueba otra vez.");
-          if (!response.ok || !result.text) throw new Error(result.error || "No se pudo transcribir el audio.");
+          if (!response.ok || !result.text) {
+            const browserText = `${fallbackTranscript.current} ${fallbackInterim.current}`.trim();
+            if (!browserText) throw new Error(result.error === "transcription_unavailable" ? "Whisper no está disponible. Levanta el servicio Whisper o usa Chrome para dictar con el respaldo del navegador." : result.error || "No se pudo transcribir el audio.");
+            result.text = browserText;
+          }
           const textarea = document.querySelector(".composer textarea") as HTMLTextAreaElement | null;
           if (!textarea) throw new Error("No encontré el campo del chat.");
           const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;

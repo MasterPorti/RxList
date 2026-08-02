@@ -1,13 +1,16 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function CloseChat() {
   const path = usePathname();
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState(false);
   const [cleared, setCleared] = useState(false);
+  const [provider, setProvider] = useState<"agy" | "gemini">(process.env.NEXT_PUBLIC_DEFAULT_PROVIDER === "gemini" ? "gemini" : "agy");
+  useEffect(() => { const saved = window.localStorage.getItem("rxlist_provider"); if (saved === "gemini") setProvider("gemini"); }, []);
+  function changeProvider(next: "agy" | "gemini") { setProvider(next); window.localStorage.setItem("rxlist_provider", next); window.dispatchEvent(new CustomEvent("rxlist:provider-changed", { detail: next })); }
   if (path !== "/doctor") return null;
 
   async function close() {
@@ -22,7 +25,7 @@ export default function CloseChat() {
     setAsking(false);
   }
 
-  return <div className="closechat">
+  return <div className="closechat"><div className="provider-switch" role="group" aria-label="Proveedor de IA"><button className={provider === "agy" ? "active" : ""} onClick={() => changeProvider("agy")} disabled={busy}>AGY</button><button className={provider === "gemini" ? "active" : ""} onClick={() => changeProvider("gemini")} disabled={busy}>Gemini API</button></div>
     {cleared && <span className="closechat-success" role="status">✓ Conversación eliminada</span>}
     {asking ? <div className="closechat-confirm"><span>¿Limpiar la conversación?</span><button className="btn" onClick={() => setAsking(false)}>Cancelar</button><button className="btn primary" onClick={close} disabled={busy}>{busy ? "Limpiando…" : "Sí, limpiar"}</button></div> : <button className="btn clear-chat-button" onClick={() => setAsking(true)} disabled={busy}><span aria-hidden="true">🗑</span> Limpiar conversación</button>}
   </div>;

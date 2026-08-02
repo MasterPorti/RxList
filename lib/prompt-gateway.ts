@@ -87,19 +87,28 @@ function patientRegistrationContinuation(message: string): LocalResult | null {
   const current = clean(latest(message));
   const conversation = clean(message);
   const isPatientFlow = /como paciente|\bpaciente\b|registrar (?:a )?.*paciente|para registrar .*paciente|datos obligatorios/.test(conversation);
+  const isoDate = current.match(/\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b/);
+  const validIsoDate = !isoDate || (() => { const year = Number(isoDate[1]); const month = Number(isoDate[2]); const day = Number(isoDate[3]); const date = new Date(Date.UTC(year, month - 1, day)); return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day; })();
   const hasDate = /\b\d{1,2}\s+de\s+[a-z]+\s+del?\s+(?:dos\s*mil|\d{4})|\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b/.test(current);
-  const hasPhone = /\b\d[\d\s().-]{7,}\b/.test(current);
-  const hasLocation = /\bpiso\s*[1-4]\b/.test(current) && /\bcama\s*\d+\b/.test(current);
-  if (isPatientFlow && hasDate && hasPhone && !hasLocation) {
-    const hasFloor = /\bpiso\s*[1-4]\b/.test(current);
-    if (hasFloor) return null;
-    return clarification(
-      hasFloor
-        ? "Ya tengo los datos del paciente y el piso. La cama libre se asignará automáticamente; falta confirmar cualquier otro dato pendiente."
-        : "Ya tengo los datos del paciente. Indica el piso y asignaré automáticamente una cama libre.",
-      "create_patient",
-      hasFloor ? [] : ["floor"],
-    );
+  const hasPhone = /(?:tel[eé]fono|celular|m[oó]vil|contacto)\D*(?:\+?\d[\d\s().-]{7,})\b|\b\d{10}\b/i.test(current);
+  const hasReason = /motivo(?: de ingreso)?|causa(?: de ingreso)?|ingres[oa] por|duele|dolor|panza/i.test(current);
+  const hasAllergies = /alergias?|al[eé]rgic|sin alergias/i.test(current);
+  const hasEmergencyContact = /contacto de emergencia|familiar de emergencia/i.test(current);
+  const hasLocation = /\bpiso\s*[1-4]\b/i.test(current) && /\bcama\s*\d+\b/i.test(current);
+  if (isPatientFlow && !hasLocation && (hasDate || hasPhone || hasReason || hasAllergies || hasEmergencyContact)) {
+    const hasFloor = /\bpiso\s*[1-4]\b/i.test(current);
+    const completePatientData = hasDate && validIsoDate && hasReason && hasAllergies && hasEmergencyContact && hasPhone;
+    if (completePatientData && hasFloor) return null;
+    if (completePatientData && !hasFloor) return clarification("Ya tengo los datos del paciente. Indica el piso y asignaré automáticamente una cama libre.", "create_patient", ["floor"]);
+    const missing = [
+      ...(hasDate && !validIsoDate ? ["birthDate"] : !hasDate ? ["birthDate"] : []),
+      ...(!hasReason ? ["reason"] : []), ...(!hasAllergies ? ["allergies"] : []),
+      ...(!hasEmergencyContact ? ["emergencyContact"] : []), ...(!hasPhone ? ["emergencyPhone"] : []),
+      ...(!hasFloor ? ["floor"] : []),
+    ];
+    if (!(hasDate && validIsoDate && hasReason && hasAllergies && hasEmergencyContact && hasPhone)) return null;
+    const dateMessage = hasDate && !validIsoDate ? " La fecha de nacimiento no es válida." : "";
+    return clarification(`Para registrar al paciente necesito fecha de nacimiento, motivo de ingreso, alergias, contacto de emergencia, teléfono y piso.${dateMessage}`, "create_patient", missing);
   }
   return null;
 }

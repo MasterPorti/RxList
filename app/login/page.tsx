@@ -7,6 +7,7 @@ export default function Login() {
   const [email, setEmail] = useState("admin@rxlist.local");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const [nurseMenuOpen, setNurseMenuOpen] = useState(false);
   const router = useRouter();
   const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
@@ -17,26 +18,34 @@ export default function Login() {
     ["Carmen Ruiz", "carmen.ruiz@rxlist.com"], ["Ricardo Flores", "ricardo.flores@rxlist.com"],
   ];
 
-  function fillDemo(nextEmail: string) {
+  async function loginWithCredentials(nextEmail: string, nextPassword: string) {
     setEmail(nextEmail);
-    setPassword("1234");
+    setPassword(nextPassword);
     setError("");
     setNurseMenuOpen(false);
+    setBusy(true);
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: nextEmail, password: nextPassword }),
+      });
+      if (!response.ok) {
+        setError("El acceso demo no está disponible. Reinicia el proyecto con ALLOW_DEMO_LOGIN=true.");
+        return;
+      }
+      router.push("/");
+    } catch {
+      setError("No se pudo conectar con RXList. Verifica que el proyecto esté iniciado.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
-    if (!response.ok) {
-      setError("Correo o contraseña incorrectos.");
-      return;
-    }
-    router.push("/");
+    await loginWithCredentials(email, password);
   }
 
   return <main className="loginpage">
@@ -51,17 +60,17 @@ export default function Login() {
         <label className="formlabel">Correo electrónico<input className="field" type="email" value={email} onChange={e => setEmail(e.target.value)} required /></label>
         <label className="formlabel">Contraseña<input className="field" type="password" value={password} onChange={e => setPassword(e.target.value)} required /></label>
         {error && <div className="error">{error}</div>}
-        <button className="btn primary" style={{ width: "100%", marginTop: 24, padding: 13 }}>Entrar al panel →</button>
+        <button className="btn primary" disabled={busy} style={{ width: "100%", marginTop: 24, padding: 13 }}>{busy ? "Entrando…" : "Entrar al panel →"}</button>
       </form>
       {demoMode && <div className="demo-login-tools">
         <div className="demo-login-label"><span>Modo demo</span><small>Rellena un acceso de prueba</small></div>
         <div className="demo-login-buttons">
-          <button type="button" className="btn demo-login-button" onClick={() => fillDemo("admin@rxlist.local")}>Administrador</button>
-          <button type="button" className="btn demo-login-button" onClick={() => fillDemo("erika@rxlist.com")}>Dra. Erika</button>
-          <div className="demo-nurse-picker">
-            <button type="button" className="btn demo-login-button" onClick={() => setNurseMenuOpen(open => !open)}>Menú enfermeros ▾</button>
-            {nurseMenuOpen && <div className="demo-nurse-menu">{demoNurses.map(([name, nurseEmail]) => <button type="button" key={nurseEmail} onClick={() => fillDemo(nurseEmail)}><strong>{name}</strong><small>{nurseEmail}</small></button>)}</div>}
-          </div>
+          <a className="btn demo-login-button" href="/api/auth/demo?email=admin%40rxlist.local">Administrador</a>
+          <a className="btn demo-login-button" href="/api/auth/demo?email=erika%40rxlist.com">Dra. Erika</a>
+          <details className="demo-nurse-picker">
+            <summary className="btn demo-login-button">Menú enfermeros ▾</summary>
+            <div className="demo-nurse-menu">{demoNurses.map(([name, nurseEmail]) => <a href={`/api/auth/demo?email=${encodeURIComponent(nurseEmail)}`} key={nurseEmail}><strong>{name}</strong><small>{nurseEmail}</small></a>)}</div>
+          </details>
         </div>
       </div>}
       <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 24 }}>Usa las credenciales que te haya proporcionado la administración.</p>

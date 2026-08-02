@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { agyEnabled } from "./agy-status";
 
 export const ALLOWED_FLOORS = [
   "Sin asignar",
@@ -140,6 +141,8 @@ export async function createFloorJob(transcript: string, doctorId: string): Prom
     createdAt: new Date().toISOString(),
   };
   store.jobs.set(job.id, job);
+
+  if (!(await agyEnabled())) return failJob(job, "AGY está apagado por administración. Enciéndelo desde el panel admin.");
 
   if (!job.transcript || !doctorId) return failJob(job, "Faltan la transcripción o el médico.");
   if (hasForbiddenIntent(job.transcript)) return failJob(job, "La orden contiene una acción no permitida.");

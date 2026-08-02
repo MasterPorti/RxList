@@ -1,5 +1,7 @@
 # RXList
 
+Despliegue: consulta [docs/DEPLOY.md](docs/DEPLOY.md) para Vercel y Coolify, variables de entorno, Gemini, Redis y modo demo.
+
 MVP seguro para distribución de enfermería por pisos. El doctor propone movimientos desde el chat; la aplicación valida el alcance, muestra una tarjeta editable y aplica el lote solo después de confirmación y revisión optimista.
 
 ## Arranque local

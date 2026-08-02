@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Vitals = { temperature: string; bloodPressure: string; heartRate: string; oxygenSaturation: string; notes: string };
+type Vitals = { temperature: string; bloodPressure: string; heartRate: string; respiratoryRate: string; oxygenSaturation: string; notes: string };
 
-const emptyVitals: Vitals = { temperature: "", bloodPressure: "", heartRate: "", oxygenSaturation: "", notes: "" };
+const emptyVitals: Vitals = { temperature: "", bloodPressure: "", heartRate: "", respiratoryRate: "", oxygenSaturation: "", notes: "" };
 
 export default function NursePage() {
   const [data, setData] = useState<any>(null);
@@ -73,13 +73,13 @@ export default function NursePage() {
             <div className="dose-list">{group.tasks.map((task: any) => <div className="dose-row" key={task.id}>
               <div className="dose-time"><strong>{new Date(task.scheduledAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}</strong><span>{new Date(task.scheduledAt).toLocaleDateString("es-MX")}</span></div>
               <span className={"dose-status " + task.status}>{task.status === "pending" ? "Pendiente" : task.status === "completed" ? "Realizada" : task.status}</span>
-              {task.status === "pending" ? <button className="btn primary" onClick={() => setSelected(task)}>Abrir tarea</button> : <span className="status">{task.status}</span>}
+              {task.status === "pending" ? <a className="btn primary nurse-task-link" href={`/nurse/task/${task.id}`}>Abrir tarea</a> : <span className="status">{task.status}</span>}
             </div>)}</div>
           </article>)}
           {!groups.length && <div className="empty">No tienes tareas asignadas.</div>}
         </div>
       </section>
     </section>
-    {selected && <div className="modalback"><section className="proposal"><div className="proposalhead"><strong style={{ fontFamily: "Manrope" }}>{selected.title}</strong><button className="iconbtn" onClick={() => setSelected(null)}>×</button></div><div className="proposalbody"><p className="proposalnote">Confirma al paciente, registra los signos disponibles y añade cualquier observación.</p>{(["temperature", "bloodPressure", "heartRate", "oxygenSaturation", "notes"] as const).map(k => <label className="formlabel" key={k}>{k === "temperature" ? "Temperatura" : k === "bloodPressure" ? "Presión arterial" : k === "heartRate" ? "Frecuencia cardíaca" : k === "oxygenSaturation" ? "Saturación de oxígeno" : "Observaciones"}<input className="field" value={vitals[k]} onChange={e => setVitals({ ...vitals, [k]: e.target.value })} /></label>)}</div><div className="proposalfoot"><button className="btn" onClick={() => complete("skipped")}>Omitir</button><button className="btn primary" onClick={() => complete("completed")}>Confirmar realizada</button></div></section></div>}
+    {selected && <div className="modalback"><section className="proposal"><div className="proposalhead"><div><span className="eyebrow">Registro de visita</span><strong style={{ fontFamily: "Manrope", display: "block", marginTop: 4 }}>{selected.title}</strong></div><button className="iconbtn" onClick={() => setSelected(null)}>×</button></div><div className="proposalbody"><p className="proposalnote">Al confirmar se guarda automáticamente la hora, la enfermera, la administración y los signos vitales capturados.</p>{(["temperature", "bloodPressure", "heartRate", "respiratoryRate", "oxygenSaturation", "notes"] as const).map(k => <label className="formlabel" key={k}>{k === "temperature" ? "Temperatura (°C)" : k === "bloodPressure" ? "Presión arterial" : k === "heartRate" ? "Frecuencia cardíaca (lpm)" : k === "respiratoryRate" ? "Respiraciones por minuto" : k === "oxygenSaturation" ? "Saturación de oxígeno (%)" : "Observaciones"}<input className="field" value={vitals[k]} onChange={e => setVitals({ ...vitals, [k]: e.target.value })} /></label>)}</div><div className="proposalfoot"><button className="btn" onClick={() => complete("skipped")}>Omitir</button><button className="btn primary" onClick={() => complete("completed")}>Confirmar visita y medicamento</button></div></section></div>}
   </main>;
 }

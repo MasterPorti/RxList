@@ -36,7 +36,7 @@ def startup_event():
         print(f"Error al cargar el modelo: {e}")
 
 @app.post("/transcribe")
-async def transcribe_audio(file: UploadFile = File(...)):
+async def transcribe_audio(audio: UploadFile = File(...)):
     global model
     if model is None:
         return {
@@ -44,7 +44,7 @@ async def transcribe_audio(file: UploadFile = File(...)):
             "error": "El modelo Whisper no está cargado. Asegúrate de instalar 'faster-whisper' y recargar el servidor."
         }
 
-    suffix = os.path.splitext(file.filename or "audio.webm")[1] or ".webm"
+    suffix = os.path.splitext(audio.filename or "audio.webm")[1] or ".webm"
     temp_handle = tempfile.NamedTemporaryFile(
         prefix="rxlist_audio_", suffix=suffix, delete=False
     )
@@ -53,7 +53,7 @@ async def transcribe_audio(file: UploadFile = File(...)):
     try:
         # Save uploaded audio file temporarily
         with open(temp_file, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            shutil.copyfileobj(audio.file, buffer)
         
         # Run transcription on the saved file
         segments, info = model.transcribe(temp_file, beam_size=5, language="es")

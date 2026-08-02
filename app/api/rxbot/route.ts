@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { agyEnabled } from "../../../lib/agy-status";
 
 export const runtime = "nodejs";
 
@@ -191,6 +192,7 @@ function runAgyWithGemini(userMessage: string, conversationText: string, context
 
 export async function POST(request: Request) {
   try {
+    if (!(await agyEnabled())) return new Response("AGY está apagado por administración.", { status: 503, headers: { "Content-Type": "text/plain; charset=utf-8" } });
     const body = await request.json();
     const userMessage = getLatestUserText(body);
     const conversationText = getConversationText(body);

@@ -14,7 +14,9 @@ export async function POST(req: Request) {
   const body = new FormData();
   body.append("audio", audio, audio.name || "recording.webm");
   try {
-    const response = await fetch(`${upstream}/transcribe`, { method: "POST", body, signal: AbortSignal.timeout(70_000) });
+    const headers: HeadersInit = {};
+    if (process.env.WHISPER_API_KEY) headers["X-Whisper-Api-Key"] = process.env.WHISPER_API_KEY;
+    const response = await fetch(`${upstream}/transcribe`, { method: "POST", headers, body, signal: AbortSignal.timeout(70_000) });
     return NextResponse.json(await response.json(), { status: response.status });
   } catch { return NextResponse.json({ error: "transcription_unavailable" }, { status: 503 }); }
 }

@@ -33,14 +33,21 @@ const monthNumbers: Record<string, string> = { enero: "01", febrero: "02", marzo
 const yearWords: Record<string, number> = { uno: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12, trece: 13, catorce: 14, quince: 15, dieciseis: 16, dieciséis: 16, diecisiete: 17, dieciocho: 18, diecinueve: 19, veinte: 20 };
 function draftFromMessages(messages: { who: "bot" | "user"; body: string }[]): PatientDraft {
   const source = messages.filter(message => message.who === "user").map(message => message.body).join(" ");
-  const nameMatch = source.match(/\b(?:paciente|agrega(?:r)? a|registra(?:r)? a)\s+(.+?)(?=\s+(?:como|naci|fecha|con|tiene|le duele|ingreso|piso|\d{4}[-/]\d{1,2}[-/]\d{1,2})\b|$)/i);
+  const nameMatch = source.match(/\b(?:paciente|agrega(?:r)? a|registra(?:r)? a)\s+(?:y\s+)?(.+?)(?=\s+(?:como|naci|fecha|con|tiene|le duele|ingreso|piso|principio|principios|motivo|\d{4}[-/]\d{1,2}[-/]\d{1,2}|el\s+\d{4})\b|$)/i);
   const dateMatch = source.match(/\b(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+del?\s+(?:dos\s*mil\s+)?([a-záéíóú]+|\d{4})/i);
+  const reverseDateMatch = source.match(/\b(?:el\s+)?(\d{4})\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+(\d{1,2})\b/i);
   let birthDate = "";
   if (dateMatch) {
     const year = /^\d{4}$/.test(dateMatch[3]) ? dateMatch[3] : `20${String(yearWords[dateMatch[3].toLowerCase()] ?? "").padStart(2, "0")}`;
     if (year.length === 4) birthDate = `${year}-${monthNumbers[dateMatch[2].toLowerCase()]}-${dateMatch[1].padStart(2, "0")}`;
+  } else if (reverseDateMatch) {
+    birthDate = `${reverseDateMatch[1]}-${monthNumbers[reverseDateMatch[2].toLowerCase()]}-${reverseDateMatch[3].padStart(2, "0")}`;
   }
-  return { fullName: nameMatch?.[1]?.replace(/\s+/g, " ").trim() || "", birthDate, reason: "", allergies: "", emergencyContact: "", emergencyPhone: "", floor: "" };
+  const cleanName = nameMatch?.[1]?.replace(/\s+/g, " ").trim() || "";
+  const reasonFromLabel = source.match(/\b(?:motivo(?: de ingreso)?|por)\s+(.+?)(?=\s+(?:el\s+)?\d{4}|\s+\d{1,2}\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\b|$)/i)?.[1];
+  const reasonFromName = cleanName && reverseDateMatch ? source.split(new RegExp(cleanName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"))[1]?.split(reverseDateMatch[0])[0] : "";
+  const reason = (reasonFromLabel || reasonFromName || "").replace(/^\s*(?:y|con)\s+/i, "").replace(/\s+el\s*$/i, "").trim();
+  return { fullName: cleanName, birthDate, reason, allergies: "", emergencyContact: "", emergencyPhone: "", floor: "" };
 }
 
 export default function DoctorPage() {
@@ -77,10 +84,10 @@ export default function DoctorPage() {
   useEffect(() => { const modal = document.querySelector(".nursemodal"); if (!modal || !selectedNurse || !summary) return; const assigned = summary.shifts.some(s => s.nurseId === selectedNurse.id && s.status === "scheduled"); const actions = modal.querySelectorAll(".proposalfoot .btn:not(.primary)"); actions.forEach(button => { (button as HTMLElement).style.display = assigned ? "none" : ""; }); const schedule = modal.querySelector(".shiftcards") as HTMLElement | null; if (schedule) schedule.style.display = assigned ? "none" : ""; }, [selectedNurse?.id, summary?.shifts]);
   useEffect(() => { const reset = () => { setMessages([]); setProposal(null); setPatientDraft(null); setText(""); }; window.addEventListener("rxlist:chat-closed", reset); return () => window.removeEventListener("rxlist:chat-closed", reset); }, []);
 
-  function openAiPatientDraft(plan: any) {
+  function openAiPatientDraft(plan: any, fallback?: PatientDraft) {
     const operation = plan?.operations?.find((item: any) => item?.action === "create_patient");
     if (plan?.type !== "clarification" || !operation) return false;
-    const draft = { fullName: operation.fullName || "", birthDate: operation.birthDate || "", reason: operation.reason || "", allergies: operation.allergies || "", emergencyContact: operation.emergencyContact || "", emergencyPhone: operation.emergencyPhone || "", floor: operation.floor != null ? String(operation.floor) : "" };
+    const draft = { fullName: operation.fullName || fallback?.fullName || "", birthDate: operation.birthDate || fallback?.birthDate || "", reason: operation.reason || fallback?.reason || "", allergies: operation.allergies || fallback?.allergies || "", emergencyContact: operation.emergencyContact || fallback?.emergencyContact || "", emergencyPhone: operation.emergencyPhone || fallback?.emergencyPhone || "", floor: operation.floor != null ? String(operation.floor) : fallback?.floor || "" };
     setPatientDraft(draft);
     window.dispatchEvent(new CustomEvent("rxlist:patient-draft", { detail: { ...draft, floors: summary?.floors || [] } }));
     return true;
@@ -109,7 +116,7 @@ export default function DoctorPage() {
         while (true) { const part = await reader.read(); if (part.done) break; buffer += decoder.decode(part.value, { stream: true }).replace(/\r\n/g, "\n"); const events = buffer.split("\n\n"); buffer = events.pop() || ""; events.filter(Boolean).forEach(handleEvent); }
         if (buffer.trim()) handleEvent(buffer);
         setLoading(false); document.body.dataset.rxlistHttpStatus = String(streamed.status); document.body.dataset.rxlistDurationMs = String(Math.round(performance.now() - startedAt)); document.body.dataset.rxlistProvider = "gemini";
-        if (finalPayload?.proposal) { setMessages(m => m.map((item, index) => index === m.length - 1 ? { ...item, body: finalPayload.proposal.message } : item)); if (finalPayload.proposal.type === "proposal") setProposal(finalPayload.proposal); else openAiPatientDraft(finalPayload.proposal); }
+        if (finalPayload?.proposal) { setMessages(m => m.map((item, index) => index === m.length - 1 ? { ...item, body: finalPayload.proposal.message } : item)); if (finalPayload.proposal.type === "proposal") setProposal(finalPayload.proposal); else openAiPatientDraft(finalPayload.proposal, draftFromMessages([...messages, { who: "user", body: q }])); }
         else setMessages(m => m.map((item, index) => index === m.length - 1 ? { ...item, body: finalPayload?.error ? `Gemini no pudo completar la respuesta: ${finalPayload.error}` : "No pude procesar la respuesta de Gemini." } : item));
         return;
       }
@@ -132,7 +139,7 @@ export default function DoctorPage() {
     if (x.proposal.type === "proposal") setProposal(x.proposal);
     const clarificationMessage = String(x.proposal.message || "");
     const requestsPatientFields = /paciente/i.test(clarificationMessage) && /fecha|alergia|contacto|motivo|piso|cama|datos obligatorios/i.test(clarificationMessage) && !/enfermer/i.test(clarificationMessage);
-    if (!openAiPatientDraft(x.proposal) && x.proposal.type === "clarification" && !/enfermer/i.test(clarificationMessage) && (x.proposal.intent === "create_patient" || requestsPatientFields)) { const draft = draftFromMessages([...messages, { who: "user", body: q }]); setPatientDraft(draft); window.dispatchEvent(new CustomEvent("rxlist:patient-draft", { detail: { ...draft, floors: summary?.floors || [] } })); }
+    if (!openAiPatientDraft(x.proposal, draftFromMessages([...messages, { who: "user", body: q }])) && x.proposal.type === "clarification" && !/enfermer/i.test(clarificationMessage) && (x.proposal.intent === "create_patient" || requestsPatientFields)) { const draft = draftFromMessages([...messages, { who: "user", body: q }]); setPatientDraft(draft); window.dispatchEvent(new CustomEvent("rxlist:patient-draft", { detail: { ...draft, floors: summary?.floors || [] } })); }
   }
 
   async function savePatientDraft(d: PatientDraft) {

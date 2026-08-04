@@ -22,6 +22,20 @@ function asFloor(value: unknown) {
 
 function normalizePatientProposal(plan: Plan): Plan {
   const operations = plan.operations.map((raw: any) => {
+    if (raw?.action === "move_patient") {
+      return {
+        ...raw,
+        patientId: raw.patientId || raw.id || raw.patient,
+        to: asFloor(raw.to ?? raw.floor ?? raw.destinationFloor ?? raw.piso),
+      };
+    }
+    if (raw?.action === "assign_patient") {
+      return {
+        ...raw,
+        patientId: raw.patientId || raw.id || raw.patient,
+        floor: asFloor(raw.floor ?? raw.to ?? raw.destinationFloor ?? raw.piso),
+      };
+    }
     if (raw?.action !== "create_patient") return raw;
     const operation: any = {
       ...raw,

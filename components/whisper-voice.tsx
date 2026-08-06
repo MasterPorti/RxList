@@ -13,6 +13,7 @@ export default function WhisperVoice({ onTranscribed }: { onTranscribed?: (text:
   const animation = useRef<number | null>(null);
   const timer = useRef<number | null>(null);
   const chunks = useRef<Blob[]>([]);
+  const stream = useRef<MediaStream | null>(null);
   const speech = useRef<BrowserSpeech | null>(null);
   const fallbackTranscript = useRef("");
   const fallbackInterim = useRef("");
@@ -23,7 +24,9 @@ export default function WhisperVoice({ onTranscribed }: { onTranscribed?: (text:
   const [levels, setLevels] = useState<number[]>(() => Array.from({ length: 24 }, () => .12));
 
   useEffect(() => () => {
-    recorder.current?.stop();
+    try { if (recorder.current?.state === "recording") recorder.current.stop(); } catch { /* Safari puede cerrar el recorder automáticamente */ }
+    stream.current?.getTracks().forEach(track => track.stop());
+    stream.current = null;
     try { speech.current?.stop(); } catch { /* el navegador puede detenerlo automáticamente */ }
     if (animation.current) cancelAnimationFrame(animation.current);
     if (timer.current) window.clearInterval(timer.current);
@@ -45,13 +48,14 @@ export default function WhisperVoice({ onTranscribed }: { onTranscribed?: (text:
         window.speechSynthesis.speak(unlock);
         window.speechSynthesis.resume();
       }
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.current = mediaStream;
       const supportedType = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"].find(type => MediaRecorder.isTypeSupported(type));
-      const media = supportedType ? new MediaRecorder(stream, { mimeType: supportedType }) : new MediaRecorder(stream);
+      const media = supportedType ? new MediaRecorder(mediaStream, { mimeType: supportedType }) : new MediaRecorder(mediaStream);
       const context = new AudioContext();
       const meter = context.createAnalyser();
       meter.fftSize = 64;
-      context.createMediaStreamSource(stream).connect(meter);
+      context.createMediaStreamSource(mediaStream).connect(meter);
       const samples = new Uint8Array(meter.frequencyBinCount);
       analyser.current = meter;
       audioContext.current = context;
@@ -83,16 +87,22 @@ export default function WhisperVoice({ onTranscribed }: { onTranscribed?: (text:
         try { listener.start(); } catch { speech.current = null; }
       }
       media.ondataavailable = event => { if (event.data.size) chunks.current.push(event.data); };
+      let stopHandled = false;
       media.onstop = async () => {
-        stream.getTracks().forEach(track => track.stop());
+        if (stopHandled) return;
+        stopHandled = true;
+        // Safari/iOS puede disparar onstop más de una vez o rechazar close().
+        // El recorder y el stream deben quedar libres antes de iniciar el siguiente audio.
+        if (recorder.current === media) recorder.current = null;
+        mediaStream.getTracks().forEach(track => track.stop());
+        if (stream.current === mediaStream) stream.current = null;
         try { speech.current?.stop(); } catch { /* el navegador puede detenerlo automáticamente */ }
         speech.current = null;
-        await new Promise(resolve => setTimeout(resolve, 250));
         if (animation.current) cancelAnimationFrame(animation.current);
         animation.current = null;
         analyser.current = null;
-        await audioContext.current?.close();
-        audioContext.current = null;
+        try { await context.close(); } catch { /* AudioContext ya cerrado por iOS */ }
+        if (audioContext.current === context) audioContext.current = null;
         setLevels(Array.from({ length: 24 }, () => .12));
         setRecording(false); setBusy(true); setVoiceState(false, true);
         const form = new FormData();
@@ -122,7 +132,7 @@ export default function WhisperVoice({ onTranscribed }: { onTranscribed?: (text:
             textarea.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true }));
           }
         } catch (e) { setError(e instanceof Error ? e.message : "No se pudo transcribir el audio."); }
-        setBusy(false); setVoiceState(false, false);
+        finally { setBusy(false); setVoiceState(false, false); }
       };
       recorder.current = media; media.start(); setElapsed(0); setRecording(true); setVoiceState(true, false);
     } catch { setError("Permite el acceso al micrófono para dictar al asistente."); setVoiceState(false, false); }

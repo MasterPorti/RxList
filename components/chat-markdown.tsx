@@ -67,6 +67,15 @@ export default function ChatMarkdown({text, patientNames, onPatientInfo, autoSpe
     return () => window.clearTimeout(timer);
   }, [autoSpeak, readable]);
   const readTokens = readable ? [...readable.matchAll(/\S+\s*/g)].map(match => ({ value: match[0], start: match.index || 0, end: (match.index || 0) + match[0].length })) : [];
+  function readInline(value: string, key: string): ReactNode {
+    const plain = value.replace(/\*\*|`/g, "");
+    const start = Math.max(readable.indexOf(plain), 0);
+    return [...plain.matchAll(/\S+\s*/g)].map((match, index) => {
+      const tokenStart = start + (match.index || 0), tokenEnd = tokenStart + match[0].length;
+      const state = boundary >= tokenStart && boundary < tokenEnd ? "current" : boundary >= tokenEnd ? "read" : "";
+      return <span className={state} key={`${key}-${index}`}>{match[0]}</span>;
+    });
+  }
   const lines=text.split(/\r?\n/), blocks:ReactNode[]=[];
   for(let i=0;i<lines.length;i++){
     const line=lines[i].trim();
@@ -82,7 +91,7 @@ export default function ChatMarkdown({text, patientNames, onPatientInfo, autoSpe
     if(/^[-*]\s+/.test(line)){
       const items:string[]=[];while(i<lines.length&&/^[-*]\s+/.test(lines[i].trim())){items.push(lines[i].trim().replace(/^[-*]\s+/,""));i++;}i--;blocks.push(<ul key={i}>{items.map((x,j)=><li key={j}>{inline(x)}</li>)}</ul>);continue;
     }
-    blocks.push(<p key={i}>{inline(line)}</p>);
+    blocks.push(<p key={i} className={speaking ? "chatmarkdown-reading-line" : ""}>{speaking ? readInline(line, String(i)) : inline(line)}</p>);
   }
-  return <div className="chatmarkdown"><button type="button" className={`chatmarkdown-speak${speaking ? " active" : ""}`} onClick={speak} aria-label={speaking ? "Detener lectura" : "Leer respuesta en voz alta"} title={speaking ? "Detener lectura" : "Leer en voz alta"}>{speaking ? "◼ Detener" : autoplayBlocked ? "🔊 Reproducir" : "🔊 Leer"}</button>{speaking && <div className="chatmarkdown-read-along" aria-label="Texto que se está leyendo">{readTokens.map((token, index) => <span className={boundary >= token.start && boundary < token.end ? "current" : boundary >= token.end ? "read" : ""} key={`${token.start}-${index}`}>{token.value}</span>)}</div>}{blocks}</div>;
+  return <div className="chatmarkdown"><button type="button" className={`chatmarkdown-speak${speaking ? " active" : ""}`} onClick={speak} aria-label={speaking ? "Detener lectura" : "Leer respuesta en voz alta"} title={speaking ? "Detener lectura" : "Leer en voz alta"}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4Zm12.5 3a4.5 4.5 0 0 0-2.1-3.8v7.6a4.5 4.5 0 0 0 2.1-3.8Zm0-8.2v2.1A8 8 0 0 1 20 12a8 8 0 0 1-3.5 6.1v2.1A10 10 0 0 0 22 12a10 10 0 0 0-5.5-8.2Z" /></svg></button>{blocks}</div>;
 }

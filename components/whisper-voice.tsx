@@ -50,22 +50,34 @@ export default function WhisperVoice({ onTranscribed }: { onTranscribed?: (text:
       }
       const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.current = mediaStream;
-      const supportedType = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"].find(type => MediaRecorder.isTypeSupported(type));
+      const canCheckType = typeof MediaRecorder.isTypeSupported === "function";
+      const supportedType = ["audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus"].find(type => !canCheckType || MediaRecorder.isTypeSupported(type));
       const media = supportedType ? new MediaRecorder(mediaStream, { mimeType: supportedType }) : new MediaRecorder(mediaStream);
-      const context = new AudioContext();
-      const meter = context.createAnalyser();
-      meter.fftSize = 64;
-      context.createMediaStreamSource(mediaStream).connect(meter);
-      const samples = new Uint8Array(meter.frequencyBinCount);
-      analyser.current = meter;
-      audioContext.current = context;
-      const draw = () => {
-        meter.getByteFrequencyData(samples);
-        const next = Array.from({ length: 24 }, (_, index) => Math.max(.12, Math.min(1, (samples[index % samples.length] || 0) / 150)));
-        setLevels(next);
-        animation.current = requestAnimationFrame(draw);
-      };
-      draw();
+      // En iOS el medidor puede fallar o quedar suspendido aunque la grabación
+      // sí funcione. Es opcional: nunca debe impedir iniciar MediaRecorder.
+      let context: AudioContext | null = null;
+      try {
+        const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContextCtor) {
+          context = new AudioContextCtor();
+          if (context.state === "suspended") await context.resume().catch(() => undefined);
+          const meter = context.createAnalyser();
+          meter.fftSize = 64;
+          context.createMediaStreamSource(mediaStream).connect(meter);
+          const samples = new Uint8Array(meter.frequencyBinCount);
+          analyser.current = meter;
+          audioContext.current = context;
+          const draw = () => {
+            try {
+              meter.getByteFrequencyData(samples);
+              const next = Array.from({ length: 24 }, (_, index) => Math.max(.12, Math.min(1, (samples[index % samples.length] || 0) / 150)));
+              setLevels(next);
+              animation.current = requestAnimationFrame(draw);
+            } catch { /* El medidor de iOS puede cerrarse mientras se graba. */ }
+          };
+          draw();
+        }
+      } catch { context = null; analyser.current = null; audioContext.current = null; }
       chunks.current = [];
       fallbackTranscript.current = "";
       fallbackInterim.current = "";
@@ -101,7 +113,7 @@ export default function WhisperVoice({ onTranscribed }: { onTranscribed?: (text:
         if (animation.current) cancelAnimationFrame(animation.current);
         animation.current = null;
         analyser.current = null;
-        try { await context.close(); } catch { /* AudioContext ya cerrado por iOS */ }
+        try { await context?.close(); } catch { /* AudioContext ya cerrado por iOS */ }
         if (audioContext.current === context) audioContext.current = null;
         setLevels(Array.from({ length: 24 }, () => .12));
         setRecording(false); setBusy(true); setVoiceState(false, true);
@@ -135,7 +147,15 @@ export default function WhisperVoice({ onTranscribed }: { onTranscribed?: (text:
         finally { setBusy(false); setVoiceState(false, false); }
       };
       recorder.current = media; media.start(); setElapsed(0); setRecording(true); setVoiceState(true, false);
-    } catch { setError("Permite el acceso al micrófono para dictar al asistente."); setVoiceState(false, false); }
+    } catch {
+      stream.current?.getTracks().forEach(track => track.stop());
+      stream.current = null;
+      try { await audioContext.current?.close(); } catch { /* iOS puede cerrarlo automáticamente */ }
+      audioContext.current = null;
+      analyser.current = null;
+      setRecording(false); setBusy(false);
+      setError("Permite el acceso al micrófono para dictar al asistente."); setVoiceState(false, false);
+    }
   }
 
   function setVoiceState(nextRecording: boolean, nextBusy: boolean) { window.dispatchEvent(new CustomEvent("rxlist:voice-state", { detail: { recording: nextRecording, busy: nextBusy } })); }

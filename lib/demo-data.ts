@@ -1,7 +1,7 @@
 import { hashPassword } from "./auth";
 import type { Store } from "./types";
 
-export function demoStore(): Store {
+function baseDemoStore(): Store {
   const nurses = [
     { id: "demo-nurse-1", name: "Sofía Rivero", email: "sofia.rivero@rxlist.com", floor: 1 as const, birthDate: "1992-04-18", status: "active" as const, userId: "demo-nurse-user-1", shifts: ["demo-shift-1"] },
     { id: "demo-nurse-2", name: "Pablo Martínez", email: "pablo.martinez@rxlist.com", floor: 2 as const, birthDate: "1988-09-03", status: "active" as const, userId: "demo-nurse-user-2", shifts: ["demo-shift-2"] },
@@ -37,3 +37,47 @@ export function demoStore(): Store {
   ];
   return { schemaVersion: 3, revision: 1, users: [{ id: "admin", name: "Administración", email: "admin@rxlist.local", passwordHash: hashPassword("RXList-Admin-2026!", "rxlist-admin-salt"), role: "admin" as const }, doctor, ...nurses.map((nurse, index) => ({ id: nurse.userId, name: nurse.name, email: nurse.email, passwordHash: hashPassword(`RXList-Nurse-${index + 1}-2026!`, `demo-nurse-salt-${index + 1}`), role: "nurse" as const, nurseId: nurse.id, mustChangePassword: false }))], floors, patients, shifts: nurses.map((nurse, index) => ({ id: `demo-shift-${index + 1}`, nurseId: nurse.id, floor: nurse.floor, date: "fixed", kind: index % 2 ? "night" as const : "day" as const, startsAt: index % 2 ? "17:00" : "05:00", endsAt: index % 2 ? "05:00" : "17:00", status: "scheduled" as const })), medications, tasks, vitals: [{ id: "demo-vital-1", taskId: tasks[0].id, patientId: patients[0].id, temperature: "37.4", bloodPressure: "122/78", heartRate: "82", respiratoryRate: "16", oxygenSaturation: "97", notes: "Paciente estable.", recordedBy: nurses[0].userId, recordedAt: "2026-07-29T14:05:00.000Z" }, { id: "demo-vital-2", taskId: tasks[2].id, patientId: patients[1].id, temperature: "36.9", bloodPressure: "118/76", heartRate: "78", respiratoryRate: "15", oxygenSaturation: "98", notes: "Evolución favorable.", recordedBy: nurses[2].userId, recordedAt: "2026-07-30T14:05:00.000Z" }], messages: [], audit: [], chatHistory: {}, settings: { agyEnabled: true } };
 }
+
+const expandedNames = [
+  "María Fernanda Salgado", "Jorge Alberto Pineda", "Patricia Gómez Ríos", "Héctor Iván Morales", "Teresa del Carmen Ruiz", "Óscar Ramírez Luna", "Gabriela Torres León", "Samuel Navarro Cárdenas", "Lorena Beatriz Campos", "Arturo Sebastián Cruz", "Beatriz Elena Moreno", "Mónica Alejandra Fuentes", "Rafael Tomás Ibarra",
+  "Marta Sofía Castillo", "Diego Emiliano Vargas", "Valentina Ortega Cruz", "Mateo Alejandro Flores", "Regina Méndez Soto", "Sofía Guadalupe Reyes", "Emiliano Torres Silva", "Camila Andrea Núñez", "Daniela Marín López", "Tomás Alejandro Ríos", "Julia Fernanda Molina", "Nicolás Eduardo Lara",
+  "Fernando Quiroz Beltrán", "Nadia Isabel Campos", "Miguel Ángel Rosales", "Carolina Jiménez Pardo", "Raúl Esteban Valdés", "Silvia Navarro Peña", "Eduardo Castañeda", "Marisol Vega Santillán", "Adriana Patricia León", "Óscar Javier Molina", "Claudia Beatriz Serrano", "Felipe Andrés Duarte", "Irene Valeria Campos",
+  "Ismael Mendoza Ortiz", "Verónica Salas Núñez", "Alberto Villanueva", "Rocío Belén Acosta", "Esteban Mauricio Ríos", "Laura Isabel Cárdenas", "Hugo Daniel Pacheco", "Natalia Fernanda Soto", "Mauricio Ángel Reyes", "Cecilia Torres Vázquez"
+];
+const expandedReasons = [
+  "Neumonía adquirida en comunidad", "Insuficiencia cardiaca descompensada", "Diabetes mellitus tipo 2 descontrolada", "Pielonefritis complicada", "Anemia sintomática en estudio", "Crisis hipertensiva controlada", "Bronquiolitis viral", "Apendicitis en observación", "Fiebre sin foco", "Asma con sibilancias", "Postoperatorio de colecistectomía", "Fractura de tibia postoperatorio", "Dolor abdominal agudo", "Reacción alérgica en observación", "Arritmia sintomática"
+];
+
+export function expandDemoStore(store: Store): Store {
+  if (!store.patients.length) return expandDemoStore(baseDemoStore());
+  const demoPatients = store.patients.every(patient => String(patient.id).startsWith("demo-") || String(patient.id).startsWith("bulk-"));
+  if (!demoPatients || store.patients.filter(patient => patient.status !== "discharged").length >= 50) return store;
+  const targets = new Map([[1, 14], [2, 13], [3, 13], [4, 10]]);
+  const nurses = (store.users.find(user => user.role === "doctor") as any)?.nurses || [];
+  const usedBeds = new Map<number, Set<number>>([1, 2, 3, 4].map(floor => [floor, new Set(store.patients.filter(patient => patient.floor === floor && patient.status !== "discharged" && patient.bed).map(patient => Number(patient.bed)))]));
+  const floorCounts = (floor: number) => store.patients.filter(patient => patient.status !== "discharged" && patient.floor === floor).length;
+  const floors = [1, 2, 3, 4];
+  expandedNames.forEach((fullName, index) => {
+    const floor = floors.find(candidate => floorCounts(candidate) < (targets.get(candidate) || 0));
+    if (!floor) return;
+    const floorRecord = store.floors.find(item => item.id === floor);
+    const bed = Array.from({ length: floorRecord?.beds || 20 }, (_, position) => position + 1).find(candidate => !usedBeds.get(floor)?.has(candidate));
+    if (!bed) return;
+    usedBeds.get(floor)?.add(bed);
+    const nurse = nurses.find((item: any) => item.floor === floor && item.status !== "inactive") || nurses[0];
+    const patientId = `bulk-demo-patient-${index + 1}`;
+    const reason = expandedReasons[index % expandedReasons.length];
+    const pediatric = floor === 2;
+    const birthYear = pediatric ? 2010 + (index % 11) : 1945 + (index % 48);
+    store.patients.push({ id: patientId, fullName, birthDate: `${birthYear}-${String((index % 12) + 1).padStart(2, "0")}-${String((index % 27) + 1).padStart(2, "0")}`, reason, allergies: index % 7 === 0 ? "Penicilina" : "Ninguna conocida", emergencyContact: `Contacto de ${fullName.split(" ").at(-1)}`, emergencyPhone: `555-${String(3000 + index).slice(-4)}`, floor: floor as 1 | 2 | 3 | 4, bed, admittedAt: `2026-08-${String((index % 5) + 1).padStart(2, "0")}T${String((index % 10) + 8).padStart(2, "0")}:00:00.000Z`, status: "admitted", notes: "Registro demo ampliado para presentación clínica." } as any);
+    const medicationId = `bulk-demo-med-${index + 1}`;
+    const taskId = `bulk-demo-task-${index + 1}`;
+    store.medications.push({ id: medicationId, patientId, name: reason.includes("Diabetes") ? "Metformina" : reason.includes("respiratoria") || reason.includes("Asma") ? "Salbutamol" : reason.includes("Dolor") ? "Paracetamol" : "Omeprazol", dose: pediatric ? "10 mg VO" : "20 mg VO", times: ["08:00", "20:00"], startDate: "2026-08-01", floor: floor as 1 | 2 | 3 | 4, nurseId: nurse?.id, status: "active", notes: "Dato sintético de demostración." } as any);
+    store.tasks.push({ id: taskId, patientId, medicationId, title: "Revisar signos vitales", scheduledAt: `2026-08-${String((index % 5) + 6).padStart(2, "0")}T${String((index % 10) + 8).padStart(2, "0")}:00:00.000Z`, nurseId: nurse?.id, floor: floor as 1 | 2 | 3 | 4, status: index % 9 === 0 ? "completed" : "pending", notes: "Tarea demo para registrar evolución." } as any);
+    for (let reading = 0; reading < 3; reading += 1) store.vitals.push({ id: `bulk-demo-vital-${index + 1}-${reading + 1}`, taskId, patientId, temperature: (pediatric ? 36.8 : 36.9 + (index % 3) * 0.1).toFixed(1), bloodPressure: index % 6 === 0 ? "138/86" : "120/76", heartRate: String(76 + (index % 22)), respiratoryRate: String(pediatric ? 18 + (index % 5) : 16 + (index % 4)), oxygenSaturation: String(pediatric ? 97 + (reading % 2) : 98), notes: "Lectura histórica sintética para demo.", recordedBy: nurse?.userId || "demo-nurse-user-1", recordedAt: `2026-08-${String(reading + 1).padStart(2, "0")}T${String(8 + reading).padStart(2, "0")}:30:00.000Z` } as any);
+  });
+  store.revision = Math.max(store.revision, 1);
+  return store;
+}
+
+export function demoStore(): Store { return expandDemoStore(baseDemoStore()); }

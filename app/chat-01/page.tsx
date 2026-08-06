@@ -42,6 +42,12 @@ export default function Chat01Page() {
   useEffect(() => { const box = scrollRef.current; if (box) box.scrollTop = box.scrollHeight; }, [messages, thinking]);
   useEffect(() => () => { if (typeTimer.current) window.clearTimeout(typeTimer.current); }, []);
   useEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    input.style.height = "auto";
+    input.style.height = `${Math.min(Math.max(input.scrollHeight, 28), 120)}px`;
+  }, [text]);
+  useEffect(() => {
     const handleUserInput = (event: Event) => {
       const input = event.target as HTMLTextAreaElement;
       if (input?.classList.contains("chatgpt-input") && input.value.trim() && !typing) loadScript();

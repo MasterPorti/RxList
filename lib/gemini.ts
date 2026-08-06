@@ -72,6 +72,14 @@ function hasCompletePatientList(message: string, context?: Pick<Store, "patients
   return patients.every(patient => response.includes(normalized(patient.fullName)));
 }
 
+function requestsInternalMessage(message: string) {
+  return /\b(?:manda|mandale|env[ií]a|enviale|dile|avisa|mensaje)\b[\s\S]{0,120}\b(?:enfermer|piso|mensaje)\b/i.test(message);
+}
+
+function hasSendMessageOperation(proposal: ReturnType<typeof parseGeminiPlan>) {
+  return proposal.operations.some((operation: any) => operation?.action === "send_message" && operation.body && (operation.floor !== undefined || (Array.isArray(operation.recipientIds) && operation.recipientIds.length)));
+}
+
 async function callGemini(key: string, method: "generateContent" | "streamGenerateContent", prompt: string, signal: AbortSignal) {
   let lastResponse: Response | undefined;
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -98,6 +106,14 @@ export async function proposeWithGemini(message: string, doctor: Doctor, context
     const text = body.candidates?.[0]?.content?.parts?.map((part: any) => part.text || "").join("") || "";
     try {
       let proposal = parseGeminiPlan(text);
+      if (requestsInternalMessage(message) && !hasSendMessageOperation(proposal)) {
+        const retryPrompt = `${buildAgyPrompt(message, doctor, context)}\n\nCORRECCIÓN OBLIGATORIA: esta es una solicitud de mensajería interna. Devuelve type "proposal", intent "send_message" y exactamente una operación send_message con body profesional, recipientIds usando los userId exactos de ENFERMERAS DISPONIBLES y floor numérico si el doctor indicó un piso. No devuelvas operations vacías y no digas que se envió hasta que el doctor confirme.`;
+        const retryResponse = await callGemini(key, "generateContent", retryPrompt, controller.signal);
+        if (!retryResponse.ok) throw new Error(`Gemini API retry ${retryResponse.status}`);
+        const retryBody = await retryResponse.json() as any;
+        const retryText = retryBody.candidates?.[0]?.content?.parts?.map((part: any) => part.text || "").join("") || "";
+        proposal = parseGeminiPlan(retryText);
+      }
       if (requestsCompletePatientList(message) && !hasCompletePatientList(proposal.message, context)) {
         const retryPrompt = `${buildAgyPrompt(message, doctor, context)}\n\nCORRECCIÓN OBLIGATORIA: tu respuesta anterior fue incompleta. Devuelve type "no_change", intent "query_patient", operations [] y una tabla Markdown completa con una fila por cada paciente activo que aparece en PACIENTES. Incluye todos los nombres, sin resumir, sin omitir pacientes y sin escribir únicamente una introducción. No uses camas ni capacidad.`;
         const retryResponse = await callGemini(key, "generateContent", retryPrompt, controller.signal);

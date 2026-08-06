@@ -24,6 +24,7 @@ export default function ChatMarkdown({text, patientNames, onPatientInfo, autoSpe
   const [speaking, setSpeaking] = useState(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const [boundary, setBoundary] = useState(-1);
+  const reportReady = false;
   const autoStarted = useRef(false);
   const speechStarted = useRef(false);
   const readable = text.replace(/```[\s\S]*?```/g, "").replace(/^\s*\|.*$/gm, "").replace(/^\s*[-*]\s*/gm, "").replace(/[*_#`|]/g, " ").replace(/\s+/g, " ").trim();
@@ -93,5 +94,5 @@ export default function ChatMarkdown({text, patientNames, onPatientInfo, autoSpe
     }
     blocks.push(<p key={i} className={speaking ? "chatmarkdown-reading-line" : ""}>{speaking ? readInline(line, String(i)) : inline(line)}</p>);
   }
-  return <div className="chatmarkdown"><button type="button" className={`chatmarkdown-speak${speaking ? " active" : ""}`} onClick={speak} aria-label={speaking ? "Detener lectura" : "Leer respuesta en voz alta"} title={speaking ? "Detener lectura" : "Leer en voz alta"}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4Zm12.5 3a4.5 4.5 0 0 0-2.1-3.8v7.6a4.5 4.5 0 0 0 2.1-3.8Zm0-8.2v2.1A8 8 0 0 1 20 12a8 8 0 0 1-3.5 6.1v2.1A10 10 0 0 0 22 12a10 10 0 0 0-5.5-8.2Z" /></svg></button>{blocks}</div>;
+  return <div className="chatmarkdown"><button type="button" className={`chatmarkdown-speak${speaking ? " active" : ""}`} onClick={speak} aria-label={speaking ? "Detener lectura" : "Leer respuesta en voz alta"} title={speaking ? "Detener lectura" : "Leer en voz alta"}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4Zm12.5 3a4.5 4.5 0 0 0-2.1-3.8v7.6a4.5 4.5 0 0 0 2.1-3.8Zm0-8.2v2.1A8 8 0 0 1 20 12a8 8 0 0 1-3.5 6.1v2.1A10 10 0 0 0 22 12a10 10 0 0 0-5.5-8.2Z" /></svg></button>{blocks}{reportReady && !/^\s*(?:###\s*)?informaci[oó]n cl[ií]nica/i.test(text) && <button type="button" className="chatgpt-pdf-button" onClick={() => window.dispatchEvent(new CustomEvent("rxlist:open-report", { detail: { content: text } }))}>▣ Ver PDF</button>}</div>;
 }

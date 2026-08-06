@@ -20,6 +20,7 @@ export async function POST(req:Request){
   const body=await req.json();const parsed=Plan.safeParse(body.proposal);
   if(!parsed.success||parsed.data.type!=="proposal")return NextResponse.json({error:"invalid_proposal"},{status:400});
   const operations=parsed.data.operations as any[];
+  if (!operations.length) return NextResponse.json({error:"empty_proposal"},{status:400});
   const nurseAccess:any[]=[];
   if(c.store.revision!==Number(body.revision))return NextResponse.json({error:"revision_conflict"},{status:409});
   const doctor=c.user;
@@ -43,7 +44,8 @@ export async function POST(req:Request){
     if(op.action==="send_message"){
       const requested=Array.isArray(op.recipientIds)?op.recipientIds.map(String):[];
       const recipients=requested.map((id:string)=>doctor.nurses.find(n=>n.userId===id||n.id===id)?.userId).filter((id:string|undefined):id is string=>Boolean(id));
-      if(typeof op.floor==="number") recipients.push(...doctor.nurses.filter(n=>n.floor===op.floor&&n.userId).map(n=>n.userId as string));
+      const targetFloor=floorValue(op.floor);
+      if(typeof targetFloor==="number") recipients.push(...doctor.nurses.filter(n=>n.floor===targetFloor&&n.userId).map(n=>n.userId as string));
       op.recipientIds=[...new Set(recipients)];
       if(!op.body||!op.recipientIds.length)return NextResponse.json({error:"message_data_required"},{status:400});
     }

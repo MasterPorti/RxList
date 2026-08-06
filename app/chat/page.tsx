@@ -20,12 +20,19 @@ function escapeReportHtml(value: string) {
   return value.replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character] || character));
 }
 
+function reportInline(value: string) {
+  return escapeReportHtml(value)
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/__([^_]+)__/g, "<strong>$1</strong>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>");
+}
+
 function reportHtml(markdown: string) {
   const lines = markdown.split(/\r?\n/), output: string[] = [];
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index].trim();
     if (!line) continue;
-    if (line.startsWith("### ")) { output.push(`<h2>${escapeReportHtml(line.slice(4))}</h2>`); continue; }
+    if (/^#{2,6}\s+/.test(line)) { output.push(`<h2>${reportInline(line.replace(/^#{2,6}\s+/, ""))}</h2>`); continue; }
     if (line.startsWith("|") && lines[index + 1]?.trim().match(/^\|?\s*:?-{3,}/)) {
       const cells = (value: string) => value.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(cell => escapeReportHtml(cell.trim()));
       const head = cells(line); const rows: string[][] = []; index += 2;
@@ -34,8 +41,16 @@ function reportHtml(markdown: string) {
       output.push(`<table><thead><tr>${head.map(cell => `<th>${cell}</th>`).join("")}</tr></thead><tbody>${rows.map(row => `<tr>${head.map((_, cellIndex) => `<td>${row[cellIndex] || "-"}</td>`).join("")}</tr>`).join("")}</tbody></table>`);
       continue;
     }
+    if (line.includes("\t") && lines[index + 1]?.includes("\t")) {
+      const cells = (value: string) => value.split("\t").map(cell => reportInline(cell.trim()));
+      const head = cells(line); const rows: string[][] = []; index += 1;
+      while (index < lines.length && lines[index].trim().includes("\t")) { rows.push(cells(lines[index].trim())); index += 1; }
+      index -= 1;
+      output.push(`<table><thead><tr>${head.map(cell => `<th>${cell}</th>`).join("")}</tr></thead><tbody>${rows.map(row => `<tr>${head.map((_, cellIndex) => `<td>${row[cellIndex] || "-"}</td>`).join("")}</tr>`).join("")}</tbody></table>`);
+      continue;
+    }
     if (/^[-*]\s+/.test(line)) { output.push(`<li>${escapeReportHtml(line.replace(/^[-*]\s+/, ""))}</li>`); continue; }
-    output.push(`<p>${escapeReportHtml(line).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")}</p>`);
+    output.push(`<p>${reportInline(line)}</p>`);
   }
   return output.join("");
 }
@@ -115,6 +130,15 @@ export default function ChatPage() {
     const handleVoiceState = (event: Event) => setVoiceBusy(Boolean((event as CustomEvent<{ busy: boolean }>).detail?.busy));
     window.addEventListener("rxlist:voice-state", handleVoiceState);
     return () => window.removeEventListener("rxlist:voice-state", handleVoiceState);
+  }, []);
+
+  useEffect(() => {
+    const openReport = (event: Event) => {
+      const content = (event as CustomEvent<{ content?: string }>).detail?.content;
+      if (content) createPatientPdf(content);
+    };
+    window.addEventListener("rxlist:open-report", openReport);
+    return () => window.removeEventListener("rxlist:open-report", openReport);
   }, []);
 
   async function ask(value = text, fromVoice = false) {
@@ -207,7 +231,7 @@ export default function ChatPage() {
   async function logout() { await fetch("/api/auth/logout", { method: "POST" }); router.replace("/login"); }
   function askPatientInfo(name: string) { void ask(`Dame la información clínica y operativa de ${name}.`); }
   function isReportRequest(value: string) {
-    return /\b(?:genera(?:me|r)?|gen[eé]rame|crea(?:me|r)?|cr[eé]ame|haz(?:me)?|prepara(?:me|r)?|hacer|dame)\b[\s\S]{0,80}\b(?:reporte|informe)\b|\b(?:reporte|informe)\b[\s\S]{0,80}\b(?:paciente|de)\b/i.test(value);
+    return /\b(?:genera(?:me|r)?|gen[eé]rame|crea(?:me|r)?|cr[eé]ame|haz(?:me)?|prepara(?:me|r)?|hacer|dame)\b[\s\S]{0,80}\b(?:reporte|repote|informe)\b|\b(?:reporte|repote|informe)\b[\s\S]{0,80}\b(?:paciente|de)\b/i.test(value);
   }
 
   function openPatientDraftFromProposal(result: any) {

@@ -14,7 +14,8 @@ function parseJson(value: string) {
 }
 
 function parseGeminiPlan(value: string) {
-  const data = parseJson(value) as any;
+  const parsed = parseJson(value) as any;
+  const data = Array.isArray(parsed) ? parsed[0] : parsed;
   if (!data || typeof data !== "object") throw new Error("gemini_invalid_plan");
   const incomingIntent = String(data.intent || "");
   if (incomingIntent === "create_entity" || incomingIntent === "add_entity") {
@@ -33,7 +34,7 @@ function parseGeminiPlan(value: string) {
       data.operations = [];
     }
   }
-  const validIntents = new Set(["create_nurse", "move_nurse", "update_floor", "create_patient", "assign_patient", "move_patient", "discharge_patient", "create_shift", "check_availability", "create_medication", "create_task", "complete_task", "query_floor", "query_patient"]);
+  const validIntents = new Set(["create_nurse", "move_nurse", "update_floor", "create_patient", "assign_patient", "move_patient", "discharge_patient", "create_shift", "check_availability", "create_medication", "create_task", "complete_task", "send_message", "query_floor", "query_patient"]);
   if (data.intent !== undefined && !validIntents.has(String(data.intent))) data.intent = undefined;
   if (!["proposal", "clarification", "rejected", "no_change"].includes(data.type)) data.type = Array.isArray(data.operations) && data.operations.length ? "proposal" : "clarification";
   if (typeof data.message !== "string") data.message = "Gemini devolvió una respuesta sin mensaje.";
@@ -61,7 +62,7 @@ async function callGemini(key: string, method: "generateContent" | "streamGenera
   for (let attempt = 0; attempt < 3; attempt++) {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${process.env.GEMINI_MODEL || "gemini-3.1-flash-lite"}:${method}?alt=${method === "streamGenerateContent" ? "sse" : "json"}&key=${encodeURIComponent(key)}`, {
       method: "POST", signal, headers: { "content-type": "application/json" },
-      body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { temperature: 0.1, responseMimeType: "application/json" } }),
+      body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: prompt }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 8192, responseMimeType: "application/json" } }),
     });
     if (response.status !== 429 || attempt === 2) return response;
     lastResponse = response;
@@ -70,7 +71,7 @@ async function callGemini(key: string, method: "generateContent" | "streamGenera
   return lastResponse!;
 }
 
-export async function proposeWithGemini(message: string, doctor: Doctor, context?: Pick<Store, "floors" | "patients" | "shifts" | "medications" | "tasks">) {
+export async function proposeWithGemini(message: string, doctor: Doctor, context?: Pick<Store, "floors" | "patients" | "shifts" | "medications" | "tasks" | "vitals">) {
   const key = process.env.API_GEMINI || process.env.GEMINI_API_KEY;
   if (!key) throw new Error("API_GEMINI no está configurada");
   const controller = new AbortController();
@@ -80,14 +81,27 @@ export async function proposeWithGemini(message: string, doctor: Doctor, context
     if (!response.ok) throw new Error(`Gemini API ${response.status}`);
     const body = await response.json() as any;
     const text = body.candidates?.[0]?.content?.parts?.map((part: any) => part.text || "").join("") || "";
-    return { proposal: parseGeminiPlan(text), provider: "gemini" as const };
+    try {
+      return { proposal: parseGeminiPlan(text), provider: "gemini" as const };
+    } catch (parseError) {
+      // Gemini puede devolver JSON válido con una introducción, Markdown o
+      // campos incompletos aunque se solicite responseMimeType JSON. Reintenta
+      // únicamente la serialización; la intención sigue siendo de Gemini.
+      console.warn("[RXList] Gemini devolvió un plan no válido; solicitando JSON estricto", parseError);
+      const retryPrompt = `${buildAgyPrompt(message, doctor, context)}\n\nREINTENTO OBLIGATORIO: la respuesta anterior no pudo validarse. Devuelve únicamente un objeto JSON válido, sin Markdown ni texto fuera del objeto. Para una consulta informativa usa type "no_change", operations [], intent query_floor o query_patient y escribe la respuesta completa en message. No inventes datos ni conviertas una consulta de enfermeras en una consulta de camas.`;
+      const retryResponse = await callGemini(key, "generateContent", retryPrompt, controller.signal);
+      if (!retryResponse.ok) throw new Error(`Gemini API retry ${retryResponse.status}`);
+      const retryBody = await retryResponse.json() as any;
+      const retryText = retryBody.candidates?.[0]?.content?.parts?.map((part: any) => part.text || "").join("") || "";
+      return { proposal: parseGeminiPlan(retryText), provider: "gemini" as const };
+    }
   } catch (error) {
     console.error("[RXList] Gemini API request failed", error);
     return { proposal: Plan.parse({ type: "clarification", message: "No pude conectar con Gemini API. No se realizó ningún cambio. Verifica tu API key y vuelve a intentarlo.", operations: [] }), provider: "gemini-unavailable" as const };
   } finally { clearTimeout(timeout); }
 }
 
-export function streamGeminiProposal(message: string, doctor: Doctor, context: Pick<Store, "floors" | "patients" | "shifts" | "medications" | "tasks">, onComplete: (proposal: ReturnType<typeof Plan.parse>) => Promise<unknown>) {
+export function streamGeminiProposal(message: string, doctor: Doctor, context: Pick<Store, "floors" | "patients" | "shifts" | "medications" | "tasks" | "vitals">, onComplete: (proposal: ReturnType<typeof Plan.parse>) => Promise<unknown>) {
   const key = process.env.API_GEMINI || process.env.GEMINI_API_KEY;
   if (!key) throw new Error("API_GEMINI no está configurada");
   const controller = new AbortController();

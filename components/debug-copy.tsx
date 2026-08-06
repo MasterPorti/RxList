@@ -3,8 +3,8 @@ import { useState } from "react";
 export default function DebugCopy() {
   const [copied, setCopied] = useState(false);
   async function copyDebug() {
-    const chat = document.querySelector(".chat .messages")?.textContent?.trim() || "(sin mensajes)";
-    const proposal = document.querySelector(".proposal-inline")?.textContent?.trim() || "(sin propuesta abierta)";
+    const chat = document.querySelector(".chat .messages")?.textContent?.trim() || document.querySelector(".chatgpt-thread")?.textContent?.trim() || "(sin mensajes)";
+    const proposal = document.querySelector(".proposal-inline")?.textContent?.trim() || document.querySelector(".chatgpt-proposal")?.textContent?.trim() || "(sin propuesta abierta)";
     const body = document.body.dataset;
     const diagnostics = [
       `Último mensaje: ${body.rxlistLastMessage || "(sin datos)"}`,

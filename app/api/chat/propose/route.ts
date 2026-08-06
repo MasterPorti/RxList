@@ -7,6 +7,7 @@ import { routePrompt } from "../../../../lib/prompt-gateway";
 import { Plan } from "../../../../lib/types";
 import { agyEnabled } from "../../../../lib/agy-status";
 import { proposeWithGemini, streamGeminiProposal } from "../../../../lib/gemini";
+import { normalizeName } from "../../../../lib/domain";
 
 const patientRequiredFields = ["fullName", "birthDate", "reason", "allergies", "emergencyContact", "emergencyPhone", "floor"];
 
@@ -20,20 +21,26 @@ function asFloor(value: unknown) {
   return undefined;
 }
 
-function normalizePatientProposal(plan: Plan): Plan {
+function normalizePatientProposal(plan: Plan, store: Awaited<ReturnType<typeof getStore>>): Plan {
   const operations = plan.operations.map((raw: any) => {
     if (raw?.action === "move_patient") {
+      const source = [raw.fullName, raw.name, raw.patientName, raw.patient, plan.message].filter(Boolean).join(" ");
+      const patient = store.patients.find(item => item.id === raw.patientId || item.id === raw.id) || store.patients.find(item => source.toLocaleLowerCase().includes(normalizeName(item.fullName).toLocaleLowerCase()));
       return {
         ...raw,
-        patientId: raw.patientId || raw.id || raw.patient,
-        to: asFloor(raw.to ?? raw.floor ?? raw.destinationFloor ?? raw.piso),
+        patientId: patient?.id || raw.patientId || raw.id || raw.patient,
+        fullName: patient?.fullName || raw.fullName || raw.name || raw.patientName,
+        to: asFloor(raw.to ?? raw.floor ?? raw.destinationFloor ?? raw.piso ?? plan.message),
       };
     }
     if (raw?.action === "assign_patient") {
+      const source = [raw.fullName, raw.name, raw.patientName, raw.patient, plan.message].filter(Boolean).join(" ");
+      const patient = store.patients.find(item => item.id === raw.patientId || item.id === raw.id) || store.patients.find(item => source.toLocaleLowerCase().includes(normalizeName(item.fullName).toLocaleLowerCase()));
       return {
         ...raw,
-        patientId: raw.patientId || raw.id || raw.patient,
-        floor: asFloor(raw.floor ?? raw.to ?? raw.destinationFloor ?? raw.piso),
+        patientId: patient?.id || raw.patientId || raw.id || raw.patient,
+        fullName: patient?.fullName || raw.fullName || raw.name || raw.patientName,
+        floor: asFloor(raw.floor ?? raw.to ?? raw.destinationFloor ?? raw.piso ?? plan.message),
       };
     }
     if (raw?.action !== "create_patient") return raw;
@@ -109,7 +116,7 @@ export async function POST(req: Request) {
   }
   if (selectedProvider === "gemini" && gateway.provider !== "local" && body.stream === true) {
     const stream = streamGeminiProposal(prompt, user, gateway.context, async proposal => {
-      const completed = assignFreeBeds(normalizePatientProposal(proposal), store);
+      const completed = assignFreeBeds(normalizePatientProposal(proposal, store), store);
       store.chatHistory[user.id] = [...history, `Doctor: ${current}`, `Asistente: ${completed.message}`].slice(-8);
       await saveStore(store);
       return completed;
@@ -117,7 +124,7 @@ export async function POST(req: Request) {
     return new Response(stream, { headers: { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive" } });
   }
   const rawResult = gateway.provider === "local" ? gateway : selectedProvider === "gemini" ? await proposeWithGemini(prompt, user, gateway.context) : await proposeWithAgy(prompt, user, gateway.context);
-  const result = { ...rawResult, proposal: assignFreeBeds(normalizePatientProposal(rawResult.proposal), store) };
+  const result = { ...rawResult, proposal: assignFreeBeds(normalizePatientProposal(rawResult.proposal, store), store) };
   const next = [...history, `Doctor: ${current}`, `Asistente: ${result.proposal.message}`].slice(-8);
   store.chatHistory[user.id] = next;
   await saveStore(store);

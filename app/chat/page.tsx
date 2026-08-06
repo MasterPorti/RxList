@@ -7,7 +7,7 @@ import ChatMarkdown from "../../components/chat-markdown";
 import RxlistBot from "../../components/rxlist-bot";
 import WhisperVoice from "../../components/whisper-voice";
 
-type Message = { role: "user" | "assistant"; content: string; fromVoice?: boolean };
+type Message = { role: "user" | "assistant"; content: string; fromVoice?: boolean; report?: boolean };
 type Summary = { doctor: { name: string; email: string }; patients: any[]; nurses: any[]; floors: any[]; revision: number };
 
 const starters = [
@@ -143,7 +143,7 @@ export default function ChatPage() {
       const result = await response.json().catch(() => null);
       const proposal = result?.proposal;
       document.body.dataset.rxlistProvider = result?.provider || "local";
-      setMessages(current => [...current, { role: "assistant", content: proposal?.message || "El asistente no devolvió una respuesta válida.", fromVoice }]);
+      setMessages(current => [...current, { role: "assistant", content: isReportRequest(question) ? `Información clínica y operativa\n\n${proposal?.message || "El asistente no devolvió una respuesta válida."}` : (proposal?.message || "El asistente no devolvió una respuesta válida."), fromVoice, report: isReportRequest(question) }]);
       if (proposal?.type === "proposal") setProposal(proposal);
       openPatientDraftFromProposal(proposal);
       document.body.dataset.rxlistRevision = String(result?.revision ?? "(sin datos)");
@@ -153,7 +153,7 @@ export default function ChatPage() {
       document.body.dataset.rxlistPromptLength = String(result?.debug?.promptLength ?? "(sin datos)");
       setLoading(false); return;
     }
-    setMessages(current => [...current, { role: "assistant", content: "", fromVoice }]);
+    setMessages(current => [...current, { role: "assistant", content: "", fromVoice, report: isReportRequest(question) }]);
     const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ""; let finalProposal: any = null;
     const event = (raw: string) => {
       const kind = raw.match(/^event:\s*(.+)$/m)?.[1]?.trim(); const data = raw.match(/^data:\s*(.+)$/m)?.[1]?.trim(); if (!data) return;
@@ -161,7 +161,7 @@ export default function ChatPage() {
     };
     while (true) { const part = await reader.read(); if (part.done) break; buffer += decoder.decode(part.value, { stream: true }).replace(/\r\n/g, "\n"); const chunks = buffer.split("\n\n"); buffer = chunks.pop() || ""; chunks.filter(Boolean).forEach(event); }
     if (buffer.trim()) event(buffer);
-    if (finalProposal?.message) setMessages(current => current.map((item, index) => index === current.length - 1 ? { ...item, content: finalProposal.message } : item));
+    if (finalProposal?.message) setMessages(current => current.map((item, index) => index === current.length - 1 ? { ...item, content: isReportRequest(question) ? `Información clínica y operativa\n\n${finalProposal.message}` : finalProposal.message } : item));
     if (finalProposal?.type === "proposal") setProposal(finalProposal);
     openPatientDraftFromProposal(finalProposal);
     setLoading(false);
@@ -206,6 +206,9 @@ export default function ChatPage() {
   async function clearChat() { await fetch("/api/chat/close", { method: "POST" }); setMessages([]); setProposal(null); setNotice(""); }
   async function logout() { await fetch("/api/auth/logout", { method: "POST" }); router.replace("/login"); }
   function askPatientInfo(name: string) { void ask(`Dame la información clínica y operativa de ${name}.`); }
+  function isReportRequest(value: string) {
+    return /\b(?:genera(?:me|r)?|gen[eé]rame|crea(?:me|r)?|cr[eé]ame|haz(?:me)?|prepara(?:me|r)?|hacer|dame)\b[\s\S]{0,80}\b(?:reporte|informe)\b|\b(?:reporte|informe)\b[\s\S]{0,80}\b(?:paciente|de)\b/i.test(value);
+  }
 
   function openPatientDraftFromProposal(result: any) {
     if (result?.type !== "clarification" || result?.intent !== "create_patient") return;
@@ -270,16 +273,11 @@ export default function ChatPage() {
   }
 
   function createPatientPdf(content: string) {
-    const frame = document.createElement("iframe");
-    frame.setAttribute("title", "Vista de impresión del informe clínico");
-    frame.style.position = "fixed"; frame.style.width = "1px"; frame.style.height = "1px"; frame.style.opacity = "0"; frame.style.pointerEvents = "none"; frame.style.border = "0";
-    document.body.appendChild(frame);
-    const printDocument = frame.contentDocument;
-    if (!printDocument) { frame.remove(); setNotice("No se pudo preparar el informe para impresión."); return; }
-    printDocument.open();
-    printDocument.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>RXList - Informe clínico</title><style>body{font-family:Arial,sans-serif;color:#172033;margin:42px;line-height:1.45}header{border-bottom:3px solid #1d5fbf;padding-bottom:16px;margin-bottom:24px}h1{font-size:24px;margin:0;color:#123b72}h2{font-size:16px;color:#174f91;border-bottom:1px solid #cbd7e8;padding-bottom:6px;margin:24px 0 10px}p{font-size:12px;margin:7px 0}table{width:100%;border-collapse:collapse;margin:12px 0 20px;font-size:10px;page-break-inside:auto}tr{page-break-inside:avoid}th{background:#e8f0fb;color:#123b72;text-align:left}th,td{border:1px solid #b9c7d9;padding:7px;vertical-align:top}li{font-size:12px;margin:4px 0}.meta{color:#64748b;font-size:11px}.notice{margin-top:34px;padding-top:10px;border-top:1px solid #cbd5e1;color:#64748b;font-size:10px}@media print{body{margin:20mm}}</style></head><body><header><h1>RXList</h1><div class="meta">Informe clínico y operativo · ${new Date().toLocaleString("es-MX")}</div></header>${reportHtml(content)}<div class="notice">Documento informativo generado por RXList. Verificar la información y las indicaciones antes de utilizarlo en atención clínica.</div></body></html>`);
-    printDocument.close();
-    window.setTimeout(() => { frame.contentWindow?.focus(); frame.contentWindow?.print(); window.setTimeout(() => frame.remove(), 1500); }, 250);
+    const reportWindow = window.open("", "_blank");
+    if (!reportWindow) { setNotice("El navegador bloqueó la pestaña del reporte. Permite ventanas emergentes para RXList."); return; }
+    reportWindow.opener = null;
+    reportWindow.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>RXList · Informe clínico</title><style>*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;background:#fff;margin:0;padding:32px;line-height:1.45}main{max-width:850px;margin:0 auto}.toolbar{display:flex;justify-content:flex-end;gap:8px;margin-bottom:24px}.toolbar button{border:1px solid #111;background:#111;color:#fff;border-radius:5px;padding:10px 15px;font-weight:700;cursor:pointer}.toolbar button:last-child{background:#fff;color:#111}header{border-bottom:2px solid #111;padding-bottom:15px;margin-bottom:22px}h1{font-size:25px;letter-spacing:.04em;margin:0 0 5px}h2{font-size:16px;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid #555;padding-bottom:6px;margin:24px 0 10px}p{font-size:12px;margin:7px 0}table{width:100%;border-collapse:collapse;margin:12px 0 20px;font-size:10px;page-break-inside:auto}tr{page-break-inside:avoid}th{background:#eee;text-align:left}th,td{border:1px solid #555;padding:7px;vertical-align:top}li{font-size:12px;margin:4px 0}.meta{font-size:11px;color:#444}.notice{margin-top:34px;padding-top:10px;border-top:1px solid #555;color:#444;font-size:10px}@media(max-width:600px){body{padding:16px}.toolbar{position:sticky;top:0;background:#fff;padding:8px 0;z-index:2}h1{font-size:21px}table{font-size:9px}th,td{padding:5px}}@media print{body{padding:0}.toolbar{display:none}main{max-width:none}header{margin-top:0}h1{font-size:22px}}</style></head><body><main><div class="toolbar"><button onclick="window.print()">Imprimir / Guardar PDF</button><button onclick="window.close()">Cerrar</button></div><header><h1>RXList</h1><div class="meta">Informe clínico y operativo · ${new Date().toLocaleString("es-MX")}</div></header>${reportHtml(content)}<div class="notice">Documento informativo generado por RXList. Verificar la información y las indicaciones antes de utilizarlo en atención clínica.</div></main></body></html>`);
+    reportWindow.document.close();
   }
 
   function submit(event: FormEvent) { event.preventDefault(); void ask(); }

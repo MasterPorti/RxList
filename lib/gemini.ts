@@ -57,6 +57,21 @@ function parseGeminiPlan(value: string) {
   return Plan.parse(data);
 }
 
+function normalized(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+}
+
+function requestsCompletePatientList(message: string) {
+  return /(?:qu[eé]|que)\s+pacientes|lista\s+(?:completa|de)\s+pacientes|todos?\s+los\s+pacientes|pacientes\s+(?:del|de)\s+(?:hospital|todos?\s+los\s+pisos)|cantidad\s+de\s+pacientes/i.test(message);
+}
+
+function hasCompletePatientList(message: string, context?: Pick<Store, "patients">) {
+  const patients = context?.patients?.filter(patient => patient.status !== "discharged") || [];
+  if (!patients.length) return true;
+  const response = normalized(message);
+  return patients.every(patient => response.includes(normalized(patient.fullName)));
+}
+
 async function callGemini(key: string, method: "generateContent" | "streamGenerateContent", prompt: string, signal: AbortSignal) {
   let lastResponse: Response | undefined;
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -82,7 +97,16 @@ export async function proposeWithGemini(message: string, doctor: Doctor, context
     const body = await response.json() as any;
     const text = body.candidates?.[0]?.content?.parts?.map((part: any) => part.text || "").join("") || "";
     try {
-      return { proposal: parseGeminiPlan(text), provider: "gemini" as const };
+      let proposal = parseGeminiPlan(text);
+      if (requestsCompletePatientList(message) && !hasCompletePatientList(proposal.message, context)) {
+        const retryPrompt = `${buildAgyPrompt(message, doctor, context)}\n\nCORRECCIÓN OBLIGATORIA: tu respuesta anterior fue incompleta. Devuelve type "no_change", intent "query_patient", operations [] y una tabla Markdown completa con una fila por cada paciente activo que aparece en PACIENTES. Incluye todos los nombres, sin resumir, sin omitir pacientes y sin escribir únicamente una introducción. No uses camas ni capacidad.`;
+        const retryResponse = await callGemini(key, "generateContent", retryPrompt, controller.signal);
+        if (!retryResponse.ok) throw new Error(`Gemini API retry ${retryResponse.status}`);
+        const retryBody = await retryResponse.json() as any;
+        const retryText = retryBody.candidates?.[0]?.content?.parts?.map((part: any) => part.text || "").join("") || "";
+        proposal = parseGeminiPlan(retryText);
+      }
+      return { proposal, provider: "gemini" as const };
     } catch (parseError) {
       // Gemini puede devolver JSON válido con una introducción, Markdown o
       // campos incompletos aunque se solicite responseMimeType JSON. Reintenta
